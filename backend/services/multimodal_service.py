@@ -241,11 +241,11 @@ class MultimodalAnalysisService:
     def _prepare_analysis_prompt(self, multimodal_data: Dict, video_path: str) -> str:
         """
         准备分析提示
-        
+
         Args:
             multimodal_data: 整合后的多模态数据
             video_path: 视频文件路径
-            
+
         Returns:
             分析提示
         """
@@ -254,53 +254,90 @@ class MultimodalAnalysisService:
         import re
         clean_filename = re.sub(r'\.\w+$', '', filename)
         clean_filename = re.sub(r'^\d+[_\-]', '', clean_filename)
-        
-        prompt = f"""请对以下视频内容进行全面分析：
+
+        prompt = f"""你是一个专业的视频内容分析专家。请对以下视频内容进行全面、深入的多模态分析。
 
 重要提示：视频文件名为 "{clean_filename}"，这个文件名本身就是一个很好的概括，请在分析时充分考虑这个信息。
 
 """
-        
+
         # 添加视频信息
         video_info = multimodal_data["video_info"]
-        prompt += f"视频信息：\n"
+        prompt += f"视频基本信息：\n"
         prompt += f"- 时长：{video_info['duration']:.2f}秒\n"
         prompt += f"- 分辨率：{video_info['width']}x{video_info['height']}\n"
         prompt += f"- 帧率：{video_info['fps']:.2f}fps\n\n"
-        
+
         # 添加转录内容
         transcription = multimodal_data["transcription"]
-        prompt += "音频转录内容：\n"
-        for segment in transcription:
-            prompt += f"[{segment['start']:.2f}s-{segment['end']:.2f}s] {segment['text']}\n"
-        prompt += "\n"
-        
-        # 添加OCR内容
+        if transcription:
+            prompt += "=" * 50 + "\n"
+            prompt += "【音频转录内容】\n"
+            prompt += "=" * 50 + "\n"
+            for segment in transcription:
+                prompt += f"[{segment['start']:.2f}s-{segment['end']:.2f}s] {segment['text']}\n"
+            prompt += "\n"
+
+        # 添加OCR内容（移除截断限制，完整保留）
         ocr_results = multimodal_data["ocr_results"]
-        prompt += "图像文字识别内容：\n"
-        for i, ocr in enumerate(ocr_results):
-            if ocr["text"]:
-                screenshot = next((s for s in multimodal_data["screenshots"] if s["path"] == ocr["image_path"]), None)
-                time_str = f"[{screenshot['time']:.2f}s]" if screenshot else ""
-                # 增加OCR文本长度限制，确保黑板文字完整显示
-                prompt += f"{time_str} 截图{i+1}：{ocr['text'][:500]}...\n"
-        prompt += "\n"
-        
+        ocr_texts = [ocr["text"] for ocr in ocr_results if ocr.get("text")]
+        if ocr_texts:
+            prompt += "=" * 50 + "\n"
+            prompt += "【图像文字识别内容（OCR）】\n"
+            prompt += "=" * 50 + "\n"
+            for i, ocr in enumerate(ocr_results):
+                if ocr.get("text"):
+                    screenshot = next((s for s in multimodal_data["screenshots"] if s["path"] == ocr["image_path"]), None)
+                    time_str = f"[{screenshot['time']:.2f}s]" if screenshot else f"[截图{i+1}]"
+                    # 移除截断限制，完整保留OCR内容
+                    prompt += f"{time_str}: {ocr['text']}\n\n"
+            prompt += "\n"
+
         # 添加字幕内容
         subtitle_results = multimodal_data["subtitle_results"]
         if subtitle_results:
-            prompt += "字幕内容：\n"
+            prompt += "=" * 50 + "\n"
+            prompt += "【字幕内容】\n"
+            prompt += "=" * 50 + "\n"
             for subtitle in subtitle_results:
                 prompt += f"[{subtitle['time']:.2f}s] {subtitle['text']}\n"
             prompt += "\n"
-        
-        prompt += "请基于以上信息，生成一个全面的视频分析，包括：\n"
-        prompt += "1. 视频内容的主要主题和结构\n"
-        prompt += "2. 关键信息和重要观点\n"
-        prompt += "3. 视觉元素和文字内容的关联\n"
-        prompt += "4. 整体内容的价值和意义\n"
-        prompt += "5. 可能的应用场景和受众\n"
-        
+
+        # 增强的分析框架
+        prompt += "=" * 50 + "\n"
+        prompt += "【分析要求】\n"
+        prompt += "=" * 50 + "\n"
+        prompt += """请基于以上音视频转录、图像文字（OCR）和字幕等多模态信息，进行全面深入的分析：
+
+## 分析框架（请按此结构输出）：
+
+### 1. 内容主题分析
+- 视频的核心主题是什么
+- 主题的切入角度和论述逻辑
+- 与文件名的关联度
+
+### 2. 核心内容要点
+- 列出3-5个核心要点
+- 每个要点包含：观点、论据、关键引用
+- 保留重要数据和事实
+
+### 3. 视觉与语言关联
+- OCR内容与音频转录的对应关系
+- 板书/PPT内容与口述内容的互补
+- 视觉元素传达的关键信息
+
+### 4. 关键引用与金句
+- 视频中的重要原话
+- 核心概念和定义
+- 值得记录的关键论述
+
+### 5. 总结与评价
+- 内容的价值和意义
+- 适用场景和受众
+- 可能的延伸应用
+
+请确保分析准确、深入、逻辑清晰。"""
+
         return prompt
     
     def _save_analysis_result(self, video_path: str, analysis_result: Dict) -> str:

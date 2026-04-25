@@ -12,24 +12,38 @@ async def generate_summary(text: str, filename: str = ""):
         "Authorization": f"Bearer {AI_CONFIG['api_key']}",
         "Content-Type": "application/json"
     }
-    
-    system_prompt = "请对以下内容进行总结："
+
+    # 增强的系统提示词，提供更清晰的指导
+    system_prompt = """你是一个专业的视频内容分析助手。请对以下内容进行简洁准确的总结。
+
+要求：
+1. 总结应该简洁有力，突出核心内容
+2. 保留关键术语和数据
+3. 如有视频文件名，将其作为重要参考信息"""
+
     if filename:
-        # 从文件名中提取有意义的信息（去除扩展名和可能的序号）
         import re
         clean_filename = re.sub(r'\.\w+$', '', filename)  # 去除扩展名
         clean_filename = re.sub(r'^\d+[_\-]', '', clean_filename)  # 去除开头的序号
-        system_prompt = f"""请对以下内容进行总结：
+        system_prompt = f"""你是一个专业的视频内容分析助手。请对以下内容进行简洁准确的总结。
 
-重要提示：视频文件名为 "{clean_filename}"，这个文件名本身就是一个很好的概括，请在总结时充分考虑这个信息。"""
-    
+视频文件名为 "{clean_filename}"，这个文件名包含了重要的主题信息，请作为总结的重要参考。
+
+要求：
+1. 总结应该简洁有力，突出核心内容
+2. 保留关键术语和数据
+3. 结合文件名理解内容主题
+4. 总结长度控制在200字以内"""
+
     data = {
         "model": AI_CONFIG["model"],
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": text}
         ],
-        "stream": True
+        "stream": True,
+        "temperature": 0.3,  # 降低随机性，提高一致性
+        "max_tokens": 500    # 限制输出长度
     }
 
     try:
@@ -98,27 +112,27 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
             "Content-Type": "application/json"
         }
         
-        system_prompt = f"""你是一个思维导图生成专家。请将内容转换为思维导图的 JSON 结构。
+        system_prompt = f"""你是一个专业的思维导图生成专家。请将视频内容转换为结构化的思维导图 JSON。
 
-要求：
-1. 必须严格按照示例格式生成 JSON
-2. JSON 必须包含 meta、format、data 三个顶级字段
+## 核心要求：
+1. 严格按示例格式生成 JSON
+2. 包含 meta、format、data 三个顶级字段
 3. data 必须包含 id、topic、children 字段
-4. 第一层子节点必须指定 direction，左右交替分布
+4. 第一层子节点必须指定 direction（left/right），左右交替
 5. 所有节点的 id 必须唯一
-6. 不要生成任何额外的说明文字，直接返回 JSON
-7. 确保生成的是有效的 JSON 格式"""
-        
-        if filename:
-            system_prompt += f"""
-8. 特别重要：根节点的主题必须使用视频文件名 "{root_topic}" 作为主标题，因为这个文件名本身就是一个很好的概括"""
-        
-        system_prompt += f"""
+6. 只返回 JSON，不要任何额外说明
+7. 确保 JSON 格式有效可解析
 
-示例结构：
+## 内容理解指导：
+- 根节点使用视频文件名 "{root_topic}" 作为主题
+- 子节点要提炼核心主题和关键要点
+- 思维导图层级控制在3-4层
+- 子节点数量适中，每个节点内容简洁
+
+## 示例结构：
 {json.dumps(example, ensure_ascii=False, indent=2)}
 
-请严格按照上述格式生成，不要添加任何其他内容。"""
+请严格按照上述格式生成有效的思维导图 JSON。"""
         
         data = {
             "model": AI_CONFIG["model"],
@@ -127,8 +141,8 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
                 {"role": "user", "content": text}
             ],
             "stream": False,
-            "temperature": 0.7,
-            "max_tokens": 2000
+            "temperature": 0.6,
+            "max_tokens": 4000  # 增加 token 限制以支持更复杂的思维导图
         }
 
         print(f"[generate_mindmap] 发送请求到 {url}")
@@ -197,8 +211,16 @@ async def chat_with_model(messages: List[ChatMessage], context: str):
         "Content-Type": "application/json"
     }
 
+    system_prompt = """你是一个专业的视频内容问答助手。请基于以下上下文信息，准确回答用户的问题。
+
+要求：
+1. 回答要紧扣上下文，不要偏离主题
+2. 如有必要，可引用上下文中的具体内容
+3. 回答要清晰、有条理
+4. 如问题超出上下文范围，请明确告知"""
+
     full_messages = [
-        {"role": "system", "content": f"以下是上下文信息：\n{context}\n请基于上述上下文回答用户的问题。"}
+        {"role": "system", "content": f"{system_prompt}\n\n以下是上下文信息：\n{context}"}
     ]
 
     for message in messages:
@@ -210,7 +232,9 @@ async def chat_with_model(messages: List[ChatMessage], context: str):
     data = {
         "model": AI_CONFIG["model"],
         "messages": full_messages,
-        "stream": True
+        "stream": True,
+        "temperature": 0.5,
+        "max_tokens": 1500
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -242,24 +266,50 @@ async def generate_detailed_summary(text: str, filename: str = ""):
         "Authorization": f"Bearer {AI_CONFIG['api_key']}",
         "Content-Type": "application/json"
     }
-    
-    system_prompt = "请对以下内容进行详细的总结分析，使用 Markdown 格式输出"
+
+    # 增强的系统提示词，提供更详细的结构化指导
+    base_prompt = """你是一个专业的视频内容分析助手。请对以下内容进行详细、系统的总结分析。
+
+请严格按照以下Markdown结构输出：
+1. 内容概述（约50字）
+2. 核心要点（3-5个要点，每个要点用### 小标题）
+3. 详细内容（针对每个要点展开说明，保留关键引用和数据）
+4. 总结与结论
+
+重要原则：
+- 保持原文的核心信息和关键细节
+- 逻辑清晰，层次分明
+- 关键技术术语和概念不要遗漏"""
+
     if filename:
-        # 从文件名中提取有意义的信息
         import re
         clean_filename = re.sub(r'\.\w+$', '', filename)
         clean_filename = re.sub(r'^\d+[_\-]', '', clean_filename)
-        system_prompt = f"""请对以下内容进行详细的总结分析，使用 Markdown 格式输出。
+        base_prompt = f"""你是一个专业的视频内容分析助手。请对以下内容进行详细、系统的总结分析。
 
-重要提示：视频文件名为 "{clean_filename}"，这个文件名本身就是一个很好的概括，请在总结时充分考虑这个信息。"""
-    
+视频文件名为 "{clean_filename}"，这个文件名包含了重要的主题信息，请作为总结的重要参考。
+
+请严格按照以下Markdown结构输出：
+1. 内容概述（约50字）
+2. 核心要点（3-5个要点，每个要点用### 小标题）
+3. 详细内容（针对每个要点展开说明，保留关键引用和数据）
+4. 总结与结论
+
+重要原则：
+- 保持原文的核心信息和关键细节
+- 结合文件名理解内容主题
+- 逻辑清晰，层次分明
+- 关键技术术语和概念不要遗漏"""
+
     data = {
         "model": AI_CONFIG["model"],
         "messages": [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": base_prompt},
             {"role": "user", "content": text}
         ],
-        "stream": True
+        "stream": True,
+        "temperature": 0.5,  # 适中随机性，平衡创造性和准确性
+        "max_tokens": 3000   # 允许更长的详细总结
     }
 
     try:
