@@ -1,0 +1,5 @@
+{
+  "summary": "这是一个测试总结，用于验证功能是否正常工作。",
+  "mindmap": "{\"meta\": {\"name\": \"测试思维导图\", \"author\": \"System\", \"version\": \"1.0\"}, \"format\": \"node_tree\", \"data\": {\"id\": \"root\", \"topic\": \"测试主题\", \"children\": [{\"id\": \"sub1\", \"topic\": \"子主题1\", \"direction\": \"left\", \"children\": []}, {\"id\": \"sub2\", \"topic\": \"子主题2\", \"direction\": \"right\", \"children\": []}]}}",
+  "analysis_time": "2026-04-23T01:34:58.565431"
+}

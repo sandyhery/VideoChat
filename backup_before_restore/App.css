@@ -1,0 +1,1648 @@
+/* 重置和基础样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 应用整体布局 */
+.app-header {
+  padding: 12px 20px;
+  text-align: center;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
+}
+
+.logo-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.app-logo {
+  width: 32px;
+  height: 32px;
+}
+
+.upload-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.upload-section .ant-upload {
+  width: auto;
+}
+
+.upload-section .ant-btn {
+  padding: 0 20px;
+  height: 36px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-section .anticon {
+  font-size: 16px;
+}
+
+.support-text {
+  color: #666;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+/* 主要内容区域 */
+.app-content {
+  padding: 12px;
+  height: calc(100vh - 140px);
+  overflow: hidden;
+}
+
+.content-tabs {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tab-buttons {
+  display: flex;
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+
+.tab-buttons button {
+  color: #fff;
+  margin-right: 12px;
+}
+
+.main-content {
+  display: flex;
+  height: calc(100vh - 200px);
+  background: #fff;
+}
+
+.left-panel {
+  flex: 1;
+  padding: 20px;
+  border-right: 1px solid #f0f0f0;
+  overflow-y: auto;
+}
+
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+/* 聊天区域 */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px;
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.message.user {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.message-content {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 8px;
+  color: #333;
+  max-width: 80%;
+}
+
+.message.user .message-content {
+  background: #e6f7ff;
+}
+
+.message.assistant .message-content {
+  background: #f6ffed;
+}
+
+.chat-input {
+  margin-top: auto;
+  background: #fff;
+  padding: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.chat-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.word-count {
+  color: #666;
+  font-size: 12px;
+}
+
+/* 表格样式 */
+.transcription-table {
+  margin-top: 16px;
+}
+
+.transcription-table .ant-table-thead>tr>th {
+  background: #fafafa;
+}
+
+/* 思维导图样式 */
+.mindmap-container {
+  width: 100%;
+  height: calc(100% - 60px);
+  min-height: 400px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  position: relative;
+  margin-top: 16px;
+}
+
+#mindmap-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* jsMind 自定义样式 */
+.jsmind-inner {
+  background: #fff !important;
+}
+
+/* 重要节点样式 */
+jmnode.important {
+  background-color: #e6f7ff !important;
+  border: 1px solid #91d5ff !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+}
+
+/* 加载状态样式 */
+.mindmap-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #666;
+  background: #fff;
+}
+
+/* 其他组件样式 */
+.ant-btn-text:hover {
+  background: #f5f5f5;
+}
+
+.ant-input {
+  border-color: #d9d9d9;
+}
+
+.ant-input:focus,
+.ant-input:hover {
+  border-color: #40a9ff;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f5f5;
+  border-radius: 3px;
+}
+
+/* 主布局样式 */
+.main-layout {
+  height: 100%;
+  display: flex;
+  gap: 12px;
+}
+
+.media-panel,
+.feature-panel {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-card,
+.feature-card {
+  height: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+.media-card .ant-card-body,
+.feature-card .ant-card-body {
+  height: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-card .ant-tabs-content-holder,
+.feature-card .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+}
+
+.media-card .ant-tabs-content,
+.feature-card .ant-tabs-content {
+  height: 100%;
+}
+
+.media-card .ant-tabs-tabpane,
+.feature-card .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
+  padding: 16px;
+}
+
+/* 视频卡片样式 */
+.video-card {
+  flex: 0 0 auto;
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  padding-top: 30%;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.video-player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 转录卡片样式 */
+.transcription-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.transcription-card .ant-card-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.transcription-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1890ff;
+}
+
+/* 功能面板样式 */
+.feature-card {
+  height: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.feature-card .ant-card-body {
+  height: 100%;
+  padding: 0;
+}
+
+.feature-card .ant-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.feature-card .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+}
+
+.feature-card .ant-tabs-content {
+  height: 100%;
+}
+
+.feature-card .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
+  padding: 16px;
+}
+
+/* 标签页样式 */
+.feature-card .ant-tabs-nav {
+  margin: 0;
+  padding: 8px 16px 0;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.feature-card .ant-tabs-tab {
+  padding: 12px 16px;
+  font-size: 15px;
+  transition: all 0.3s;
+}
+
+.feature-card .ant-tabs-tab:hover {
+  color: #1890ff;
+}
+
+.feature-card .ant-tabs-tab-active {
+  background: #e6f7ff;
+  border-radius: 4px 4px 0 0;
+}
+
+.feature-card .ant-tabs-content {
+  height: calc(100% - 56px);
+}
+
+/* 标签页内容样式 */
+.tab-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 简单总结样式 */
+.tab-content .markdown-content {
+  flex: 1;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 8px;
+  overflow-y: auto;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+/* 思维导图样式 */
+#mindmap {
+  flex: 1;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  min-height: 400px;
+}
+
+.mindmap-loading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #1890ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* 对话交互样式 */
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.message-list .ant-list-item {
+  padding: 8px 0;
+}
+
+.user-message,
+.ai-message {
+  max-width: 88%;
+  margin: 8px 0;
+}
+
+.user-message {
+  margin-left: auto;
+  background: #e6f7ff !important;
+  border: none !important;
+}
+
+.ai-message {
+  margin-right: auto;
+  background: #f6ffed !important;
+  border: none !important;
+}
+
+.chat-input {
+  margin-top: 16px;
+}
+
+.chat-input .ant-input {
+  border-radius: 4px;
+  resize: none;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+/* 按钮样式 */
+.tab-content .ant-btn {
+  padding: 8px 16px;
+  height: auto;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-content .ant-btn-primary {
+  background: #1890ff;
+}
+
+/* 动画效果 */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 滚动条样式 */
+.tab-content ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.tab-content ::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.tab-content ::-webkit-scrollbar-track {
+  background: #f5f5f5;
+  border-radius: 3px;
+}
+
+/* 响应式布局 */
+@media screen and (max-width: 1200px) {
+  .main-layout {
+    flex-direction: column;
+  }
+
+  .media-panel,
+  .feature-panel {
+    height: 50%;
+    min-height: 0;
+  }
+
+  .video-container {
+    padding-top: 35%;
+  }
+}
+
+.upload-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  background: #fafafa;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+}
+
+.placeholder-content {
+  text-align: center;
+}
+
+.placeholder-icon {
+  margin-bottom: 16px;
+}
+
+.placeholder-content p {
+  color: #666;
+  margin: 0;
+}
+
+.upload-section .ant-input {
+  border-radius: 4px;
+}
+
+.upload-section .ant-input:focus {
+  box-shadow: none;
+  border-color: #40a9ff;
+}
+
+.tab-content ::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.upload-section .ant-input {
+  border-radius: 4px;
+}
+
+.upload-section .ant-input:focus {
+  box-shadow: none;
+  border-color: #40a9ff;
+}
+
+/* 小屏幕适配 */
+@media screen and (max-height: 800px) {
+  .app-header {
+    padding: 8px 16px;
+  }
+
+  .logo-title {
+    margin-bottom: 8px;
+  }
+
+  .app-content {
+    padding: 8px;
+  }
+
+  .main-layout {
+    gap: 8px;
+  }
+
+  .feature-card .ant-tabs-tabpane {
+    padding: 12px;
+  }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.empty-state p {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* 左侧面板样式 */
+.media-panel {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+}
+
+.media-card {
+  height: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.media-card .ant-card-body {
+  height: 100%;
+  padding: 0;
+}
+
+.media-card .ant-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-card .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+}
+
+.media-card .ant-tabs-content {
+  height: 100%;
+}
+
+.media-card .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
+  padding: 16px;
+}
+
+/* 视频预览样式 */
+.media-preview {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+}
+
+.video-player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 转录结果样式 */
+.transcription-progress {
+  padding: 12px;
+  background: #e6f7ff;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transcription-table {
+  height: calc(100% - 60px);
+  overflow: auto;
+}
+
+.transcription-table .ant-table-wrapper {
+  height: 100%;
+}
+
+.transcription-table .ant-table-body {
+  height: calc(100% - 40px);
+  overflow-y: auto;
+}
+
+/* 上传占位符样式 */
+.upload-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafafa;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+}
+
+/* 统一的标签页样式 */
+.media-card .ant-tabs,
+.feature-card .ant-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-card .ant-tabs-nav,
+.feature-card .ant-tabs-nav {
+  margin: 0;
+  padding: 8px 16px 0;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.media-card .ant-tabs-tab,
+.feature-card .ant-tabs-tab {
+  padding: 12px 16px;
+  font-size: 15px;
+  transition: all 0.3s;
+}
+
+.media-card .ant-tabs-tab:hover,
+.feature-card .ant-tabs-tab:hover {
+  color: #1890ff;
+}
+
+.media-card .ant-tabs-tab-active,
+.feature-card .ant-tabs-tab-active {
+  background: #e6f7ff;
+  border-radius: 4px 4px 0 0;
+}
+
+.media-card .ant-tabs-content-holder,
+.feature-card .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+}
+
+.media-card .ant-tabs-content,
+.feature-card .ant-tabs-content {
+  height: 100%;
+}
+
+.media-card .ant-tabs-tabpane,
+.feature-card .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
+  padding: 16px;
+}
+
+/* 统一的卡片样式 */
+.media-card,
+.feature-card {
+  height: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.media-card .ant-card-body,
+.feature-card .ant-card-body {
+  height: 100%;
+  padding: 0;
+}
+
+/* 统一的内容区域样式 */
+.media-card .tab-content,
+.feature-card .tab-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 视频预览页面布局 */
+.preview-section {
+  margin-bottom: 20px;
+  flex: 0 0 auto;
+  /* 不伸缩，保持内容高度 */
+}
+
+.transcription-section {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 16px;
+  flex: 1;
+  /* 占用剩余空间 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 转录结果表格样式 */
+.transcription-table {
+  flex: 1;
+  overflow: auto;
+  height: 100%;
+}
+
+.transcription-table.full-height {
+  height: 100%;
+}
+
+.transcription-table .ant-table-wrapper {
+  height: 100%;
+}
+
+.transcription-table .ant-table-body {
+  height: calc(100% - 40px);
+  /* 减表头高度 */
+  overflow-y: auto;
+}
+
+/* 视频容器样式调整 */
+.video-container {
+  position: relative;
+  width: 100%;
+  padding-top: 30%;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 转录结果表格样式 */
+.transcription-section .transcription-table {
+  max-height: calc(100vh - 500px);
+  /* 调整最大高度 */
+  overflow-y: auto;
+}
+
+.transcription-section .ant-table-wrapper {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.transcription-section .ant-table-tbody>tr>td {
+  padding: 8px 16px;
+}
+
+/* 转录进度提示样式 */
+.transcription-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #e6f7ff;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #1890ff;
+}
+
+/* 音频播放器容器样式 */
+.audio-container {
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  text-align: center;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.audio-placeholder {
+  margin-bottom: 16px;
+  color: #666;
+}
+
+.audio-player {
+  width: 100%;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  flex-wrap: nowrap;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-title h3 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 500;
+  margin-right: 12px;
+}
+
+.export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.export-buttons .ant-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.export-buttons .anticon {
+  font-size: 12px;
+}
+
+.markdown-content,
+.detailed-summary-content {
+  flex: 1;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 8px;
+  overflow-y: auto;
+  line-height: 1.8;
+  font-size: 15px;
+}
+
+/* Markdown 样式优化 */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.detailed-summary-content h1,
+.detailed-summary-content h2,
+.detailed-summary-content h3 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-content p,
+.detailed-summary-content p {
+  margin-bottom: 16px;
+}
+
+.markdown-content ul,
+.markdown-content ol,
+.detailed-summary-content ul,
+.detailed-summary-content ol {
+  padding-left: 20px;
+  margin-bottom: 16px;
+}
+
+.markdown-content blockquote,
+.detailed-summary-content blockquote {
+  padding: 0 16px;
+  color: #666;
+  border-left: 4px solid #ddd;
+  margin: 16px 0;
+}
+
+.markdown-content code,
+.detailed-summary-content code {
+  background-color: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.markdown-content hr,
+.detailed-summary-content hr {
+  height: 1px;
+  background-color: #ddd;
+  border: none;
+  margin: 24px 0;
+}
+
+/* 按钮组样式 */
+.button-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* 聊天界面样式 */
+.chat-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+  max-width: 85%;
+}
+
+.message-wrapper.user {
+  align-items: flex-end;
+  margin-left: auto;
+}
+
+.message-wrapper.assistant {
+  align-items: flex-start;
+}
+
+.message-bubble {
+  position: relative;
+  padding: 12px 16px;
+  border-radius: 12px;
+  width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.message-wrapper.user .message-bubble {
+  background: #e6f7ff;
+  border-top-right-radius: 4px;
+}
+
+.message-wrapper.assistant .message-bubble {
+  background: #f6ffed;
+  border-top-left-radius: 4px;
+}
+
+.message-time {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.chat-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  background: white;
+  border-top: 1px solid #f0f0f0;
+  border-radius: 0 0 8px 8px;
+}
+
+.chat-input-area .ant-input {
+  border-radius: 20px;
+  padding: 8px 16px;
+}
+
+.chat-input-area .ant-btn {
+  min-width: 80px;
+  /* 确保按钮有足够宽度显示文字 */
+  height: 40px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 20px;
+}
+
+/* 停止按钮样式 */
+.chat-input-area .ant-btn-dangerous {
+  background-color: #ff4d4f;
+  border-color: #ff4d4f;
+}
+
+.chat-input-area .ant-btn-dangerous:hover {
+  background-color: #ff7875;
+  border-color: #ff7875;
+}
+
+/* 输入框样式 */
+.chat-input-area .ant-input[disabled] {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+/* Markdown 样式优化 */
+.message-bubble .message-content .markdown-content {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.message-bubble p {
+  margin: 0;
+}
+
+.message-bubble pre {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.message-bubble code {
+  background: #f0f0f0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  font-family: monospace;
+}
+
+.message-bubble table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.message-bubble th,
+.message-bubble td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.message-bubble th {
+  background-color: #f5f5f5;
+}
+
+.message-bubble img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.message-bubble ul,
+.message-bubble ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.message-bubble blockquote {
+  border-left: 4px solid #ddd;
+  margin: 8px 0;
+  padding-left: 16px;
+  color: #666;
+}
+
+.message-bubble h1,
+.message-bubble h2,
+.message-bubble h3,
+.message-bubble h4,
+.message-bubble h5,
+.message-bubble h6 {
+  margin: 16px 0 8px 0;
+  line-height: 1.4;
+}
+
+.message-bubble p {
+  margin: 8px 0;
+}
+
+.message-bubble a {
+  color: #1890ff;
+  text-decoration: none;
+}
+
+.message-bubble a:hover {
+  text-decoration: underline;
+}
+
+.message-bubble hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 16px 0;
+}
+
+/* 确保长文本正确换行 */
+.message-wrapper .message-bubble {
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* 复制按钮样式 */
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* 鼠标悬停时显示复制按钮 */
+.message-bubble:hover .copy-button {
+  opacity: 1;
+}
+
+/* 复制按钮图标样式 */
+.copy-button .anticon {
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+/* 调整消息内容的内边距，为复制按钮留出空间 */
+.message-bubble .message-content {
+  padding-right: 24px;
+}
+
+/* 确保复制按钮在消息气泡内部 */
+.message-bubble {
+  overflow: visible;
+}
+
+/* 优化复制钮的悬停效果 */
+.copy-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 用户消息的复制按钮位置调整 */
+.message-wrapper.user .copy-button {
+  right: 8px;
+}
+
+/* 助手消息的复制按钮位置调整 */
+.message-wrapper.assistant .copy-button {
+  right: 8px;
+}
+
+/* 消息气泡样式 */
+.message-bubble {
+  position: relative;
+  padding: 12px 16px;
+  border-radius: 12px;
+  width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+/* 用户消息样式 */
+.message-wrapper.user .message-bubble {
+  background: #e6f7ff;
+  border-top-right-radius: 4px;
+}
+
+/* AI消息样式 */
+.message-wrapper.assistant .message-bubble {
+  background: #f6ffed;
+  border-top-left-radius: 4px;
+}
+
+/* 消息内容样式 */
+.message-bubble .message-content {
+  padding-right: 24px;
+  background: transparent !important;
+  /* 确保内区域背景透明 */
+}
+
+/* 确保 Markdown 内容继承消息气泡景色 */
+.message-bubble .message-content>* {
+  background: transparent !important;
+  /* 强制所有子元素背景透明 */
+}
+
+/* 复制按钮样式 */
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: transparent !important;
+  /* 确保按钮背景透 */
+}
+
+/* 鼠标悬停显示复制按钮 */
+.message-bubble:hover .copy-button {
+  opacity: 1;
+}
+
+/* 复制按钮悬停效果 */
+.copy-button:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Markdown 内容样式 */
+.message-bubble .message-content .markdown-content {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+}
+
+/* 确保所有 Markdown 元素背景透明 */
+.message-bubble .message-content p,
+.message-bubble .message-content ul,
+.message-bubble .message-content ol,
+.message-bubble .message-content blockquote,
+.message-bubble .message-content pre,
+.message-bubble .message-content code,
+.message-bubble .message-content h1,
+.message-bubble .message-content h2,
+.message-bubble .message-content h3,
+.message-bubble .message-content h4,
+.message-bubble .message-content h5,
+.message-bubble .message-content h6 {
+  background: transparent !important;
+}
+
+.mindmap-error {
+  padding: 20px;
+  text-align: center;
+  color: #ff4d4f;
+  font-size: 14px;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 8px;
+  margin-top: 16px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+/* jsMind 主题样式 */
+jmnodes.theme-primary jmnode {
+  background-color: #fff;
+  color: #333;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+jmnodes.theme-primary jmnode:hover {
+  background-color: #f5f5f5;
+}
+
+jmnodes.theme-primary jmnode.selected {
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+/* 文件列表区域样式 */
+.file-list-section {
+  flex: 1;
+  margin-top: 20px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 分页容器样式 */
+.pagination-container {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 表格容器样式 */
+.file-list-section .ant-table-wrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+.file-list-section .ant-table {
+  flex: 1;
+  overflow: auto;
+}
+
+/* 操作按钮区域样式 */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  /* 按钮之间的间隔 */
+  align-items: center;
+  /* 垂直居中对齐 */
+  flex-direction: row;
+  /* 确保按钮水排列 */
+}
+
+/* 按钮样式 */
+.action-buttons .ant-btn {
+  margin: 0;
+  /* 移除按钮默认外边距 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 选择提示样式 */
+.selection-tip {
+  font-size: 14px;
+  color: #666;
+  background: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-right: 12px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin: 20px 0;
+  color: #666;
+}
+
+/* 导出区域样式 */
+.export-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+
+/* 当前文件提示样式 */
+.current-file-tip {
+  font-size: 14px;
+  color: #666;
+  background: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+/* 选择提示样式 */
+.selection-tip {
+  font-size: 14px;
+  color: #666;
+}
+
+/* 导出按钮组样式 */
+.export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* 修改 section-header 样式 */
+.section-header {
+  margin-bottom: 16px;
+}
+
+.section-title {
+  margin-bottom: 8px;
+}
+
+.section-title h3 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* 禁用状态下的按钮样式统一 */
+.action-buttons .ant-btn[disabled] {
+  background-color: #f5f5f5 !important;
+  border-color: #d9d9d9 !important;
+  color: rgba(0, 0, 0, 0.25) !important;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* 确保禁用状态下的按钮文字和图标颜色一致 */
+.action-buttons .ant-btn[disabled] .anticon {
+  color: rgba(0, 0, 0, 0.25) !important;
+}
+
+/* 禁用状态下的按钮悬停效果 */
+.action-buttons .ant-btn[disabled]:hover {
+  background-color: #f5f5f5 !important;
+  border-color: #d9d9d9 !important;
+  color: rgba(0, 0, 0, 0.25) !important;
+}
+
+/* 头部布局 */
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* Github链接样式 */
+.github-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  font-size: 16px;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+}
+
+.github-link:hover {
+  background: #f5f5f5;
+  color: #1890ff;
+}
+
+.github-link .anticon {
+  font-size: 20px;
+}
+
+/* 作者信息样式 */
+.author-info {
+  font-size: 14px;
+  color: #666;
+}
+
+.github-link:hover .author-info {
+  color: #1890ff;
+}
+
+/* 标题区域样式调整 */
+.title h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+/* 响应式调整 */
+@media screen and (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+
+  .title h1 {
+    font-size: 18px;
+  }
+}
+
+/* 修改头部相关样式 */
+.app-header {
+  padding: 12px 20px;
+  text-align: center;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
+  /* 添加相对定位 */
+}
+
+.title {
+  margin-bottom: 12px;
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Github链接定位到右上角 */
+.header-right {
+  position: absolute;
+  right: 20px;
+  top: 12px;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  font-size: 16px;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+}
+
+/* 响应式调整 */
+@media screen and (max-width: 768px) {
+  .header-right {
+    position: static;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .title h1 {
+    font-size: 18px;
+  }
+}

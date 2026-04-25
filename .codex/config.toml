@@ -1,0 +1,17 @@
+# 新版Codex必填核心配置（修复启动报错）
+wire_api = "responses"
+model_provider = "openai"
+default_model = "MiniMax-M2.7-250324"
+timeout = 300000
+enable_telemetry = false
+
+# OpenAI兼容层配置（Minimax原生适配）
+[openai]
+api_key = "sk-cp-GAyfdBUfd2_CGBhrqLrmgq2W-s37XhvOTAk8FSzuNuuzxTgiFrp7mR0xRkw8lk0koVT-dg40n9eygtjxuw_OTPG8pakHOhiMWfVMsES-qJWAtx7E9zw9AYg"
+base_url = "https://api.minimaxi.com/v1"
+# 模型别名映射：让Codex所有默认调用都走Minimax模型
+model_aliases = {
+  "gpt-4o" = "MiniMax-M2.7-250324",
+  "gpt-4" = "MiniMax-M2.7-250324",
+  "gpt-4o-mini" = "MiniMax-M2.5-250324"
+}

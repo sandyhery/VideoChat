@@ -122,6 +122,8 @@ function App() {
     const [mindmapLoadingFiles, setMindmapLoadingFiles] = useState(new Set());
     const [summaryLoadingFiles, setSummaryLoadingFiles] = useState(new Set());
     const [detailedSummaryLoadingFiles, setDetailedSummaryLoadingFiles] = useState(new Set());
+    const [multimodalLoadingFiles, setMultimodalLoadingFiles] = useState(new Set());
+    const [comprehensiveLoadingFiles, setComprehensiveLoadingFiles] = useState(new Set());
 
     // 打印 uploadedFiles 的变化
     useEffect(() => {
@@ -308,7 +310,7 @@ function App() {
             setAbortTranscribing(true);
 
             try {
-                const response = await fetch('http://localhost:8000/api/stop-transcribe', {
+                const response = await fetch('http://localhost:8001/api/stop-transcribe', {
                     method: 'POST',
                 });
 
@@ -373,7 +375,7 @@ function App() {
                     const formData = new FormData();
                     formData.append('file', file.file, file.name);
 
-                    const response = await fetch('http://localhost:8000/api/upload', {
+                    const response = await fetch('http://localhost:8001/api/upload', {
                         method: 'POST',
                         body: formData,
                     });
@@ -467,7 +469,7 @@ function App() {
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
 
-            const response = await fetch('http://localhost:8000/api/summary', {
+            const response = await fetch('http://localhost:8001/api/summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text }),
@@ -480,18 +482,43 @@ function App() {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let summaryText = '';
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                summaryText += chunk;
+                buffer += decoder.decode(value, { stream: true });
+
+                // 处理每一行
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (parsed.choices && parsed.choices[0].delta.content) {
+                                summaryText += parsed.choices[0].delta.content;
+                            } else if (parsed.choices && parsed.choices[0].message.content) {
+                                summaryText += parsed.choices[0].message.content;
+                            }
+                        } catch (e) {
+                            // 忽略解析错误
+                        }
+                    }
+                }
 
                 // 直接更新文件引用中的内容
                 fileRef.summary = summaryText;
                 // 强制更新 uploadedFiles 以触发重渲染
                 setUploadedFiles([...uploadedFiles]);
+                // 同时更新currentFile的内容
+                if (currentFile.id === fileId) {
+                    setCurrentFile(prev => ({ ...prev, summary: summaryText }));
+                }
             }
 
         } catch (error) {
@@ -533,7 +560,7 @@ function App() {
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
 
-            const response = await fetch('http://localhost:8000/api/mindmap', {
+            const response = await fetch('http://localhost:8001/api/mindmap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text }),
@@ -549,6 +576,10 @@ function App() {
             fileRef.mindmapData = data.mindmap;
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
+            // 同时更新currentFile的内容
+            if (currentFile.id === fileId) {
+                setCurrentFile(prev => ({ ...prev, mindmapData: data.mindmap }));
+            }
 
         } catch (error) {
             console.error('Failed to generate mindmap:', error);
@@ -664,7 +695,7 @@ function App() {
         abortController.current = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8000/api/chat', {
+            const response = await fetch('http://localhost:8001/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -784,7 +815,7 @@ function App() {
                 }
 
                 try {
-                    const response = await fetch(`http://localhost:8000/api/export/${format}`, {
+                    const response = await fetch(`http://localhost:8001/api/export/${format}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -855,7 +886,7 @@ function App() {
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
 
-            const response = await fetch('http://localhost:8000/api/detailed-summary', {
+            const response = await fetch('http://localhost:8001/api/detailed-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text }),
@@ -868,18 +899,45 @@ function App() {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let summaryText = '';
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                summaryText += chunk;
+                buffer += decoder.decode(value, { stream: true });
+
+                // 处理每一行
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // 保留不完整的行
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (parsed.choices && parsed.choices[0]) {
+                                if (parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                                    summaryText += parsed.choices[0].delta.content;
+                                } else if (parsed.choices[0].message && parsed.choices[0].message.content) {
+                                    summaryText += parsed.choices[0].message.content;
+                                }
+                            }
+                        } catch (e) {
+                            // 忽略解析错误，可能是不完整的JSON
+                        }
+                    }
+                }
 
                 // 直接更新文件引用中的内容
                 fileRef.detailedSummary = summaryText;
                 // 强制更新 uploadedFiles 以触发重渲染
                 setUploadedFiles([...uploadedFiles]);
+                // 同时更新currentFile的内容
+                if (currentFile.id === fileId) {
+                    setCurrentFile(prev => ({ ...prev, detailedSummary: summaryText }));
+                }
             }
 
         } catch (error) {
@@ -902,7 +960,7 @@ function App() {
         }
 
         try {
-            const response = await fetch(`http://localhost:8000/api/export/summary`, {
+            const response = await fetch(`http://localhost:8001/api/export/summary`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -930,6 +988,187 @@ function App() {
             console.error('Export failed:', error);
             message.error('导出失败：' + error.message);
         }
+    };
+
+    // 添加多模态分析函数
+    const handleMultimodalAnalysis = async () => {
+        if (!currentFile?.transcription || currentFile.transcription.length === 0) {
+            message.warning('需等待视频/音频完成转录');
+            return;
+        }
+        if (!currentFile) return;
+
+        const fileId = currentFile.id;
+
+        if (multimodalLoadingFiles.has(fileId)) {
+            message.warning('该文件正在进行多模态分析，请稍候');
+            return;
+        }
+
+        try {
+            setMultimodalLoadingFiles(prev => new Set([...prev, fileId]));
+
+            // 更新文件状态
+            setUploadedFiles(prev => prev.map(f =>
+                f.id === fileId ? { ...f, multimodalAnalysis: null } : f
+            ));
+
+            const response = await fetch('http://localhost:8001/api/multimodal-analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    video_path: `uploads/${currentFile.name}`,
+                    transcription: currentFile.transcription,
+                    screenshot_method: 'interval',
+                    screenshot_interval: 5
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('多模态分析失败');
+            }
+
+            const data = await response.json();
+
+            // 更新文件对象中的多模态分析数据
+            setUploadedFiles(prev => prev.map(f =>
+                f.id === fileId ? { ...f, multimodalAnalysis: data } : f
+            ));
+            if (currentFile.id === fileId) {
+                setCurrentFile(prev => ({ ...prev, multimodalAnalysis: data }));
+            }
+
+            message.success('多模态分析完成');
+
+        } catch (error) {
+            console.error('Multimodal analysis failed:', error);
+            message.error('多模态分析失败：' + error.message);
+        } finally {
+            setMultimodalLoadingFiles(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(fileId);
+                return newSet;
+            });
+        }
+    };
+
+    // 添加综合分析函数
+    const handleComprehensiveAnalysis = async () => {
+        if (!currentFile?.transcription || currentFile.transcription.length === 0) {
+            message.warning('需等待视频/音频完成转录');
+            return;
+        }
+        if (!currentFile) return;
+
+        const fileId = currentFile.id;
+
+        if (comprehensiveLoadingFiles.has(fileId)) {
+            message.warning('该文件正在进行综合分析，请稍候');
+            return;
+        }
+
+        try {
+            setComprehensiveLoadingFiles(prev => new Set([...prev, fileId]));
+
+            // 更新文件状态
+            setUploadedFiles(prev => prev.map(f =>
+                f.id === fileId ? { ...f, comprehensiveAnalysis: null } : f
+            ));
+
+            message.loading('正在进行综合分析（包含详细总结和多模态分析）...', 0);
+
+            const response = await fetch('http://localhost:8001/api/comprehensive-analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    video_path: `uploads/${currentFile.name}`,
+                    transcription: currentFile.transcription,
+                    screenshot_method: 'interval',
+                    screenshot_interval: 5
+                }),
+            });
+
+            message.destroy();
+
+            if (!response.ok) {
+                throw new Error('综合分析失败');
+            }
+
+            const data = await response.json();
+
+            // 更新文件对象中的综合分析数据
+            setUploadedFiles(prev => prev.map(f =>
+                f.id === fileId ? { ...f, comprehensiveAnalysis: data } : f
+            ));
+            if (currentFile.id === fileId) {
+                setCurrentFile(prev => ({ ...prev, comprehensiveAnalysis: data }));
+            }
+
+            message.success('综合分析完成');
+
+        } catch (error) {
+            message.destroy();
+            console.error('Comprehensive analysis failed:', error);
+            message.error('综合分析失败：' + error.message);
+        } finally {
+            setComprehensiveLoadingFiles(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(fileId);
+                return newSet;
+            });
+        }
+    };
+
+    // 导出综合分析报告
+    const handleExportComprehensiveAnalysis = () => {
+        if (!currentFile?.comprehensiveAnalysis) {
+            message.warning('没有可导出的综合分析报告');
+            return;
+        }
+
+        const analysis = currentFile.comprehensiveAnalysis;
+
+        let markdownContent = `# 视频综合分析报告\n\n`;
+        markdownContent += `**文件名称**: ${currentFile.name}\n\n`;
+        markdownContent += `**导出时间**: ${new Date().toLocaleString()}\n\n`;
+        markdownContent += `---\n\n`;
+
+        // 视频信息统计
+        markdownContent += `## 视频信息统计\n\n`;
+        markdownContent += `- **时长**: ${analysis.video_info.duration.toFixed(2)}秒\n`;
+        markdownContent += `- **分辨率**: ${analysis.video_info.width}x${analysis.video_info.height}\n`;
+        markdownContent += `- **帧率**: ${analysis.video_info.fps.toFixed(1)}fps\n`;
+        markdownContent += `- **截图数量**: ${analysis.statistics.screenshot_count}张\n`;
+        markdownContent += `- **OCR识别数**: ${analysis.statistics.ocr_count}张\n`;
+        markdownContent += `- **字幕数**: ${analysis.statistics.subtitle_count}条\n\n`;
+
+        markdownContent += `---\n\n`;
+
+        // 详细总结
+        markdownContent += `## 详细总结\n\n`;
+        markdownContent += `${analysis.detailed_summary}\n\n`;
+
+        markdownContent += `---\n\n`;
+
+        // 多模态分析总结
+        markdownContent += `## 多模态分析总结\n\n`;
+        markdownContent += `${analysis.analysis_summary}\n\n`;
+
+        markdownContent += `---\n\n`;
+        markdownContent += `*报告由 VideoChat 综合分析系统生成*\n`;
+
+        // 下载文件
+        const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_综合分析报告.md`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        message.success('导出成功');
     };
 
     // 添加复制功能
@@ -1277,6 +1516,127 @@ function App() {
                                 </Button>
                             </div>
                         </>
+                    )}
+                </div>
+            ),
+        },
+        {
+            key: '6',
+            label: '多模态分析',
+            children: (
+                <div className="tab-content">
+                    {currentFile && (
+                        <div className="current-file-tip">
+                            <span>当前文件：{currentFile.name}</span>
+                        </div>
+                    )}
+                    <div className="button-group">
+                        <Button
+                            onClick={handleMultimodalAnalysis}
+                            loading={multimodalLoadingFiles.has(currentFile?.id)}
+                            disabled={!currentFile?.transcription || multimodalLoadingFiles.has(currentFile?.id)}
+                        >
+                            {multimodalLoadingFiles.has(currentFile?.id) ? '分析中...' : '开始多模态分析'}
+                        </Button>
+                    </div>
+                    {!currentFile ? (
+                        <div className="empty-state">
+                            <p>请在左侧选择要进行多模态分析的文件</p>
+                        </div>
+                    ) : !currentFile.transcription ? (
+                        <div className="empty-state">
+                            <p>当前文件尚未完成转录</p>
+                        </div>
+                    ) : !currentFile.multimodalAnalysis && !multimodalLoadingFiles.has(currentFile.id) ? (
+                        <div className="empty-state">
+                            <p>点击上方按钮开始多模态分析</p>
+                        </div>
+                    ) : multimodalLoadingFiles.has(currentFile.id) ? (
+                        <div className="empty-state">
+                            <div className="loading-spinner"></div>
+                            <p>正在进行多模态分析，请稍候...</p>
+                        </div>
+                    ) : (
+                        <div className="multimodal-analysis-content">
+                            <h3>分析结果</h3>
+                            <p><strong>视频时长：</strong>{currentFile.multimodalAnalysis.video_info.duration.toFixed(2)}秒</p>
+                            <p><strong>分辨率：</strong>{currentFile.multimodalAnalysis.video_info.width}x{currentFile.multimodalAnalysis.video_info.height}</p>
+                            <p><strong>帧率：</strong>{currentFile.multimodalAnalysis.video_info.fps.toFixed(1)}fps</p>
+                            <p><strong>截图数量：</strong>{currentFile.multimodalAnalysis.screenshot_count}张</p>
+
+                            <h3>分析总结</h3>
+                            <ReactMarkdown>{currentFile.multimodalAnalysis.analysis.summary}</ReactMarkdown>
+                        </div>
+                    )}
+                </div>
+            ),
+        },
+        {
+            key: '7',
+            label: '综合报告',
+            children: (
+                <div className="tab-content">
+                    {currentFile && (
+                        <div className="current-file-tip">
+                            <span>当前文件：{currentFile.name}</span>
+                        </div>
+                    )}
+                    <div className="button-group">
+                        <Button
+                            onClick={handleComprehensiveAnalysis}
+                            loading={comprehensiveLoadingFiles.has(currentFile?.id)}
+                            disabled={!currentFile?.transcription || comprehensiveLoadingFiles.has(currentFile?.id)}
+                        >
+                            {comprehensiveLoadingFiles.has(currentFile?.id) ? '分析中...' : '开始综合分析'}
+                        </Button>
+                        {currentFile?.comprehensiveAnalysis && (
+                            <Button
+                                onClick={handleExportComprehensiveAnalysis}
+                                icon={<DownloadOutlined />}
+                            >
+                                导出Markdown
+                            </Button>
+                        )}
+                    </div>
+                    {!currentFile ? (
+                        <div className="empty-state">
+                            <p>请在左侧选择要进行综合分析的文件</p>
+                        </div>
+                    ) : !currentFile.transcription ? (
+                        <div className="empty-state">
+                            <p>当前文件尚未完成转录</p>
+                        </div>
+                    ) : !currentFile.comprehensiveAnalysis && !comprehensiveLoadingFiles.has(currentFile.id) ? (
+                        <div className="empty-state">
+                            <p>点击上方按钮开始综合分析</p>
+                            <p>综合分析包含：详细总结 + 多模态分析 + 视频统计</p>
+                        </div>
+                    ) : comprehensiveLoadingFiles.has(currentFile.id) ? (
+                        <div className="empty-state">
+                            <div className="loading-spinner"></div>
+                            <p>正在进行综合分析，请稍候...</p>
+                            <p>分析过程包括：多模态分析 + 详细总结生成</p>
+                        </div>
+                    ) : (
+                        <div className="comprehensive-analysis-content">
+                            <h3>视频信息统计</h3>
+                            <p><strong>时长：</strong>{currentFile.comprehensiveAnalysis.video_info.duration.toFixed(2)}秒</p>
+                            <p><strong>分辨率：</strong>{currentFile.comprehensiveAnalysis.video_info.width}x{currentFile.comprehensiveAnalysis.video_info.height}</p>
+                            <p><strong>帧率：</strong>{currentFile.comprehensiveAnalysis.video_info.fps.toFixed(1)}fps</p>
+                            <p><strong>截图数量：</strong>{currentFile.comprehensiveAnalysis.statistics.screenshot_count}张</p>
+                            <p><strong>OCR识别数：</strong>{currentFile.comprehensiveAnalysis.statistics.ocr_count}张</p>
+                            <p><strong>字幕数：</strong>{currentFile.comprehensiveAnalysis.statistics.subtitle_count}条</p>
+
+                            <h3>详细总结</h3>
+                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                                {currentFile.comprehensiveAnalysis.detailed_summary}
+                            </pre>
+
+                            <h3>多模态分析总结</h3>
+                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                                {currentFile.comprehensiveAnalysis.analysis_summary}
+                            </pre>
+                        </div>
                     )}
                 </div>
             ),

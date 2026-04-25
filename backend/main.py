@@ -5,11 +5,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
 import os
+import json
 import tempfile
 from datetime import datetime
-from backend.services.stt_service import transcribe_audio, stop_transcription, is_file_being_transcribed
-from backend.services.ai_service import generate_summary, generate_mindmap, chat_with_model, generate_detailed_summary
-from backend.models import ChatMessage, ChatRequest
+from services.stt_service import transcribe_audio, stop_transcription, is_file_being_transcribed
+from services.ai_service import generate_summary, generate_mindmap, chat_with_model, generate_detailed_summary
+from services.multimodal_service import analyze_video
+from models import ChatMessage, ChatRequest
 import asyncio
 
 app = FastAPI()
@@ -31,6 +33,7 @@ transcription_task = None
 
 class TextRequest(BaseModel):
     text: str
+    filename: str = ""
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -78,15 +81,16 @@ async def upload_file(file: UploadFile = File(...)):
 @app.post("/api/summary")
 async def get_summary(request: TextRequest):
     async def generate():
-        async for chunk in generate_summary(request.text):
-            yield chunk
+        async for chunk in generate_summary(request.text, request.filename):
+            data = {"choices": [{"delta": {"content": chunk}}]}
+            yield f"data: {json.dumps(data)}\n\n"
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 @app.post("/api/mindmap")
 async def get_mindmap(request: TextRequest):
     try:
-        mindmap_json = await generate_mindmap(request.text)
+        mindmap_json = await generate_mindmap(request.text, request.filename)
         return {"mindmap": mindmap_json}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -95,17 +99,19 @@ async def get_mindmap(request: TextRequest):
 async def chat(request: ChatRequest):
     async def generate():
         async for chunk in chat_with_model(request.messages, request.context):
-            yield chunk
+            data = {"choices": [{"delta": {"content": chunk}}]}
+            yield f"data: {json.dumps(data)}\n\n"
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 @app.post("/api/detailed-summary")
 async def get_detailed_summary(request: TextRequest):
     async def generate():
-        async for chunk in generate_detailed_summary(request.text):
-            yield chunk
+        async for chunk in generate_detailed_summary(request.text, request.filename):
+            data = {"choices": [{"delta": {"content": chunk}}]}
+            yield f"data: {json.dumps(data)}\n\n"
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 @app.post("/api/export/summary")
 async def export_summary(summary: str = Body(...)):
@@ -201,7 +207,7 @@ async def stop_transcribe():
     try:
         # 先设置停止标志
         stop_transcription()
-        
+
         if transcription_task and not transcription_task.cancelled():
             # 取消正在进行的转录任务
             transcription_task.cancel()
@@ -210,7 +216,92 @@ async def stop_transcribe():
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 pass
             transcription_task = None
-            
+
         return {"message": "Transcription stopped"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class MultimodalAnalysisRequest(BaseModel):
+    video_path: str
+    transcription: list[dict]
+    screenshot_method: str = "interval"
+    screenshot_interval: int = 5
+    screenshot_threshold: float = 30.0
+    use_cache: bool = True
+
+@app.post("/api/multimodal-analysis")
+async def multimodal_analysis(request: MultimodalAnalysisRequest):
+    """多模态分析接口：分析视频截图、OCR识别、字幕检测"""
+    try:
+        # 验证视频文件是否存在
+        if not os.path.exists(request.video_path):
+            raise HTTPException(status_code=404, detail="视频文件不存在")
+
+        # 执行多模态分析
+        result = await analyze_video(
+            request.video_path,
+            request.transcription,
+            request.screenshot_method,
+            request.screenshot_interval,
+            request.screenshot_threshold,
+            request.use_cache
+        )
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/comprehensive-analysis")
+async def comprehensive_analysis(request: MultimodalAnalysisRequest):
+    """综合分析接口：整合详细总结和多模态分析"""
+    try:
+        # 验证视频文件是否存在
+        if not os.path.exists(request.video_path):
+            raise HTTPException(status_code=404, detail="视频文件不存在")
+
+        # 1. 执行多模态分析
+        multimodal_result = await analyze_video(
+            request.video_path,
+            request.transcription,
+            request.screenshot_method,
+            request.screenshot_interval,
+            request.screenshot_threshold,
+            request.use_cache
+        )
+
+        # 2. 生成详细总结
+        transcription_text = "\n".join([seg['text'] for seg in request.transcription])
+        detailed_summary = ""
+        async for chunk in generate_detailed_summary(transcription_text):
+            detailed_summary += chunk
+
+        # 3. 构建综合分析报告
+        screenshot_count = multimodal_result.get('screenshot_count', 0)
+        ocr_results = multimodal_result.get('ocr_results', [])
+        subtitle_results = multimodal_result.get('subtitle_results', [])
+        ocr_text_count = len([r for r in ocr_results if r.get('text') and r.get('text').strip()])
+
+        comprehensive_report = {
+            "video_info": multimodal_result.get('video_info', {}),
+            "statistics": {
+                "screenshot_count": screenshot_count,
+                "ocr_count": ocr_text_count,
+                "subtitle_count": len(subtitle_results),
+            },
+            "multimodal_analysis": multimodal_result,
+            "detailed_summary": detailed_summary,
+            "analysis_summary": multimodal_result.get('analysis', {}).get('summary', ''),
+            "mindmap": multimodal_result.get('analysis', {}).get('mindmap', None),
+            "ocr_results": ocr_results,
+            "subtitle_results": subtitle_results,
+            "screenshots": multimodal_result.get('screenshots', []),
+        }
+
+        return comprehensive_report
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
