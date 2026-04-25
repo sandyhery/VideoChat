@@ -1138,6 +1138,9 @@ function App() {
         markdownContent += `- **时长**: ${analysis.video_info.duration.toFixed(2)}秒\n`;
         markdownContent += `- **分辨率**: ${analysis.video_info.width}x${analysis.video_info.height}\n`;
         markdownContent += `- **帧率**: ${analysis.video_info.fps.toFixed(1)}fps\n`;
+        if (analysis.video_info.codec) {
+            markdownContent += `- **编码**: ${analysis.video_info.codec}\n`;
+        }
         markdownContent += `- **截图数量**: ${analysis.statistics.screenshot_count}张\n`;
         markdownContent += `- **OCR识别数**: ${analysis.statistics.ocr_count}张\n`;
         markdownContent += `- **字幕数**: ${analysis.statistics.subtitle_count}条\n\n`;
@@ -1153,6 +1156,65 @@ function App() {
         // 多模态分析总结
         markdownContent += `## 多模态分析总结\n\n`;
         markdownContent += `${analysis.analysis_summary}\n\n`;
+
+        // 思维导图
+        if (analysis.mindmap) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 分析思维导图\n\n`;
+            markdownContent += `*思维导图数据已包含在导出文件中，可使用思维导图工具查看*\n\n`;
+
+            try {
+                const mindmapJson = typeof analysis.mindmap === 'string'
+                    ? analysis.mindmap
+                    : JSON.stringify(analysis.mindmap, null, 2);
+                markdownContent += `\`\`\`json\n${mindmapJson}\n\`\`\`\n\n`;
+            } catch (e) {
+                console.error('Mindmap serialization failed:', e);
+                markdownContent += `*思维导图数据格式化失败*\n\n`;
+            }
+        }
+
+        // OCR识别结果
+        if (analysis.ocr_results && analysis.ocr_results.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## OCR识别结果\n\n`;
+
+            const ocrTextCount = analysis.ocr_results.filter(r => r.text && r.text.trim()).length;
+            if (ocrTextCount > 0) {
+                markdownContent += `识别到 ${ocrTextCount} 张含文字的截图\n\n`;
+
+                for (let i = 0; i < analysis.ocr_results.length && i < 10; i++) {
+                    const ocrResult = analysis.ocr_results[i];
+                    if (ocrResult.text && ocrResult.text.trim()) {
+                        const screenshot = analysis.screenshots && analysis.screenshots[i]
+                            ? ` (第${i+1}张截图, ${analysis.screenshots[i].time.toFixed(1)}秒)`
+                            : ` (第${i+1}张截图)`;
+                        markdownContent += `### ${screenshot}\n\n`;
+                        markdownContent += `${ocrResult.text.trim()}\n\n`;
+                    }
+                }
+
+                if (ocrTextCount > 10) {
+                    markdownContent += `*还有 ${ocrTextCount - 10} 张截图的识别结果未显示*\n\n`;
+                }
+            }
+        }
+
+        // 字幕识别结果
+        if (analysis.subtitle_results && analysis.subtitle_results.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 字幕识别结果\n\n`;
+            markdownContent += `检测到 ${analysis.subtitle_results.length} 处字幕\n\n`;
+
+            for (let i = 0; i < analysis.subtitle_results.length && i < 20; i++) {
+                const subtitle = analysis.subtitle_results[i];
+                markdownContent += `**[${subtitle.time.toFixed(1)}秒]**: ${subtitle.text}\n\n`;
+            }
+
+            if (analysis.subtitle_results.length > 20) {
+                markdownContent += `*还有 ${analysis.subtitle_results.length - 20} 处字幕未显示*\n\n`;
+            }
+        }
 
         markdownContent += `---\n\n`;
         markdownContent += `*报告由 VideoChat 综合分析系统生成*\n`;
