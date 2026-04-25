@@ -1,11 +1,55 @@
 import asyncio
 import os
+import re
 from config import STT_CONFIG
 
 # 模型缓存
 model_cache = {}
 should_stop = False
 current_file = None
+
+
+def post_process_transcription(transcription: list) -> list:
+    """
+    后处理转录结果，修复方言、口音带来的常见问题
+    """
+    if not STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
+        return transcription
+
+    # 常见的方言错误模式及修正
+    corrections = [
+        # "的"、"地"、"得" 混用修正（基于上下文）
+        (r'\s+的\s+', '的'),
+        (r'\s+地\s+', '地'),
+        (r'\s+得\s+', '得'),
+        # 常见错别字修正常见方言口音问题
+        (r'那吗', '那么'),
+        (r'那个', '那个'),
+        (r'什么', '什么'),
+        (r'怎么', '怎么'),
+        (r'这样', '这样'),
+        (r'那样', '那样'),
+    ]
+
+    # 移除填充词
+    fillers = ['呃', '嗯', '啊', '哦', '呢', '嘛', '哈', '呀', '哟']
+    filler_pattern = re.compile(rf'\s*([{"".join(fillers)}])\s*')
+
+    for segment in transcription:
+        if 'text' in segment:
+            text = segment['text']
+
+            # 移除填充词
+            if STT_CONFIG.get("post_processing", {}).get("remove_fillers", True):
+                text = filler_pattern.sub('', text)
+
+            # 修正常见错误
+            for pattern, replacement in corrections:
+                text = re.sub(pattern, replacement, text)
+
+            segment['text'] = text.strip()
+
+    return transcription
 
 def get_faster_whisper_model(model_size: str = None):
     """加载 Faster-Whisper 模型"""
@@ -29,19 +73,44 @@ def get_faster_whisper_model(model_size: str = None):
     return model_cache[model_size]
 
 def transcribe_with_faster_whisper(file_path: str, model_size: str = None):
-    """使用 Faster-Whisper 进行转录"""
+    """使用 Faster-Whisper 进行转录（方言/口音优化）"""
     if model_size is None:
         model_size = STT_CONFIG.get("whisper_model", "large")
-    
+
     whisper_model = get_faster_whisper_model(model_size)
-    
+
     try:
         from faster_whisper import WhisperModel
+
+        # 构建转录参数
+        vad_params = STT_CONFIG.get("vad_params", {})
+        vad_filter = STT_CONFIG.get("vad_filter", True)
+
+        transcribe_kwargs = {
+            "language": STT_CONFIG.get("language", "zh"),
+            "beam_size": STT_CONFIG.get("beam_size", 5),
+            "vad_filter": vad_filter,
+        }
+
+        # 添加 VAD 参数优化
+        if vad_params and vad_filter:
+            transcribe_kwargs["vad_parameters"] = {
+                "threshold": vad_params.get("threshold", 0.5),
+                "min_speech_duration_ms": int(vad_params.get("min_speech_duration", 0.3) * 1000),
+                "min_silence_duration_ms": int(vad_params.get("min_silence_duration", 0.5) * 1000),
+            }
+
+        # 使用 initial_prompt 帮助识别方言/口音
+        # 这个提示词包含常见方言特征，帮助模型更好识别
+        dialect_prompt = STT_CONFIG.get("dialect_prompt", "")
+        if dialect_prompt:
+            transcribe_kwargs["initial_prompt"] = dialect_prompt
+
+        print(f"🚀 使用 Faster-Whisper 进行转录（beam_size={transcribe_kwargs['beam_size']}, vad={vad_filter}）...")
+
         segments_generator = whisper_model.transcribe(
             file_path,
-            language=STT_CONFIG.get("language", "zh"),
-            beam_size=STT_CONFIG.get("beam_size", 5),
-            vad_filter=STT_CONFIG.get("vad_filter", True)
+            **transcribe_kwargs
         )
         segments, info = segments_generator
         transcription = []
@@ -53,11 +122,16 @@ def transcribe_with_faster_whisper(file_path: str, model_size: str = None):
                 "end": segment.end,
                 "text": segment.text
             })
+
+        # 后处理
+        if transcription and STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
+            transcription = post_process_transcription(transcription)
+
         return transcription
     except ImportError:
         result = whisper_model.transcribe(
-            file_path, 
-            language=STT_CONFIG.get("language", "zh"), 
+            file_path,
+            language=STT_CONFIG.get("language", "zh"),
             beam_size=STT_CONFIG.get("beam_size", 5)
         )
         transcription = []
@@ -114,13 +188,54 @@ def transcribe_with_funasr(file_path: str):
         import torch
         from funasr import AutoModel
 
-        print(f"🚀 使用 FunASR 进行转录...")
+        print(f"🚀 使用 FunASR 进行转录（方言/口音优化）...")
 
-        # 使用 FunASR 的中文大模型
-        model = AutoModel(model="paraformer-zh", model_revision="v2.0.4")
+        # 获取配置参数
+        enable_itn = STT_CONFIG.get("enable_itn", True)  # 逆文本正则化
+        enable_punc = STT_CONFIG.get("enable_punc", True)  # 标点恢复
+        vad_params = STT_CONFIG.get("vad_params", {})
+
+        # 使用 FunASR 的中文大模型，带方言/口音优化参数
+        # paraformer-zh 支持中文普通话及多种方言
+        model_kwargs = {
+            "model": "paraformer-zh",
+            "model_revision": "v2.0.4",
+        }
+
+        # 添加 VAD 参数优化（对方言口音更鲁棒）
+        if vad_params:
+            model_kwargs["vad_model"] = "fsmn-vad"
+            model_kwargs["vad_model_revision"] = "v2.0.4"
+            model_kwargs["vad_kwargs"] = vad_params
+
+        # 添加热词文件（如果有配置）
+        hotwords_file = STT_CONFIG.get("hotwords_file", "")
+        if hotwords_file and os.path.exists(hotwords_file):
+            model_kwargs["hotword_file"] = hotwords_file
+            print(f"📝 使用热词文件: {hotwords_file}")
+
+        model = AutoModel(**model_kwargs)
+
+        # 构建生成参数
+        generate_kwargs = {
+            "input": file_path,
+            "batch_size_s": 300,
+            "merge_vad": True,  # 合并 VAD 分段，提高连续性
+            "merge_length_s": 15,  # 合并段落长度（秒），适合长音频
+        }
+
+        # 启用逆文本正则化（阿拉伯数字/日期等转换为中文）
+        if enable_itn:
+            generate_kwargs["text_norm"] = True
+            print(f"✅ 启用逆文本正则化 (ITN)")
+
+        # 启用标点恢复
+        if enable_punc:
+            generate_kwargs["punc"] = True
+            print(f"✅ 启用标点恢复")
 
         # 进行转录
-        result = model.generate(input=file_path, batch_size_s=300)
+        result = model.generate(**generate_kwargs)
 
         # 转换为标准格式
         transcription = []
@@ -155,7 +270,11 @@ def transcribe_with_funasr(file_path: str):
                     "text": text
                 })
 
-        print(f"✅ FunASR 转录完成！")
+        # 后处理：修复常见方言/口音问题
+        if transcription and STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
+            transcription = post_process_transcription(transcription)
+
+        print(f"✅ FunASR 转录完成！共 {len(transcription)} 个片段")
         return transcription
     except ImportError:
         raise Exception("FunASR 未安装，请运行: pip install funasr modelscope")
