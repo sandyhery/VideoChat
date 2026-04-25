@@ -5,6 +5,30 @@ from models import ChatMessage
 from config import AI_CONFIG
 import httpx
 
+def extract_filename_info(filename: str) -> dict:
+    """从文件名中提取关键信息"""
+    import re
+    if not filename:
+        return {"clean_name": "", "keywords": [], "special_terms": []}
+
+    name = re.sub(r'\.\w+$', '', filename)
+    name = re.sub(r'^\d+[_\-]', '', name)
+    name = re.sub(r'^第\d+[集部章节]', '', name)
+
+    keywords = re.findall(r'[\u4e00-\u9fff]{2,}', name)
+    brackets_content = re.findall(r'[（(]([^)）]+)[)）]', name)
+    special_terms = []
+    for content in brackets_content:
+        special_terms.extend(re.findall(r'[\u4e00-\u9fff]+', content))
+
+    return {
+        "clean_name": name,
+        "keywords": keywords,
+        "special_terms": special_terms,
+        "all_terms": keywords + special_terms
+    }
+
+
 async def generate_summary(text: str, filename: str = ""):
     print(f"[generate_summary] 开始生成总结，输入文本长度: {len(text)}")
     url = f"{AI_CONFIG['base_url']}/chat/completions"
@@ -19,21 +43,26 @@ async def generate_summary(text: str, filename: str = ""):
 要求：
 1. 总结应该简洁有力，突出核心内容
 2. 保留关键术语和数据
-3. 如有视频文件名，将其作为重要参考信息"""
+3. 结合视频主题理解内容"""
 
     if filename:
-        import re
-        clean_filename = re.sub(r'\.\w+$', '', filename)  # 去除扩展名
-        clean_filename = re.sub(r'^\d+[_\-]', '', clean_filename)  # 去除开头的序号
-        system_prompt = f"""你是一个专业的视频内容分析助手。请对以下内容进行简洁准确的总结。
+        file_info = extract_filename_info(filename)
+        clean_name = file_info["clean_name"]
+        keywords = ", ".join(file_info["all_terms"][:5]) if file_info["all_terms"] else "未知主题"
 
-视频文件名为 "{clean_filename}"，这个文件名包含了重要的主题信息，请作为总结的重要参考。
+        system_prompt = f"""你是一个专业的视频内容分析助手。请根据以下视频信息进行总结。
+
+【视频文件名】: {clean_name}
+【主题关键词】: {keywords}
+
+文件名和关键词包含了视频的核心主题信息，请作为总结的最重要参考。
 
 要求：
-1. 总结应该简洁有力，突出核心内容
-2. 保留关键术语和数据
-3. 结合文件名理解内容主题
-4. 总结长度控制在200字以内"""
+1. 总结必须紧扣视频主题（{clean_name}）
+2. 突出与主题相关的核心内容
+3. 保留关键术语和数据
+4. 如发现内容与主题不匹配，以主题为准进行校正
+5. 总结长度控制在200字以内"""
 
     data = {
         "model": AI_CONFIG["model"],
@@ -282,22 +311,27 @@ async def generate_detailed_summary(text: str, filename: str = ""):
 - 关键技术术语和概念不要遗漏"""
 
     if filename:
-        import re
-        clean_filename = re.sub(r'\.\w+$', '', filename)
-        clean_filename = re.sub(r'^\d+[_\-]', '', clean_filename)
-        base_prompt = f"""你是一个专业的视频内容分析助手。请对以下内容进行详细、系统的总结分析。
+        file_info = extract_filename_info(filename)
+        clean_name = file_info["clean_name"]
+        keywords = ", ".join(file_info["all_terms"][:5]) if file_info["all_terms"] else "未知主题"
 
-视频文件名为 "{clean_filename}"，这个文件名包含了重要的主题信息，请作为总结的重要参考。
+        base_prompt = f"""你是一个专业的视频内容分析助手。请根据以下视频信息进行详细、系统的总结分析。
+
+【视频文件名】: {clean_name}
+【主题关键词】: {keywords}
+
+文件名和关键词包含了视频的核心主题信息，请作为总结的最重要参考。
 
 请严格按照以下Markdown结构输出：
-1. 内容概述（约50字）
+1. 内容概述（约50字）- 必须紧扣主题"{clean_name}"
 2. 核心要点（3-5个要点，每个要点用### 小标题）
 3. 详细内容（针对每个要点展开说明，保留关键引用和数据）
 4. 总结与结论
 
 重要原则：
+- 总结必须围绕视频主题（{clean_name}）展开
+- 如发现内容偏离主题，以主题为准进行校正
 - 保持原文的核心信息和关键细节
-- 结合文件名理解内容主题
 - 逻辑清晰，层次分明
 - 关键技术术语和概念不要遗漏"""
 

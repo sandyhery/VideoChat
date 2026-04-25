@@ -9,10 +9,112 @@ should_stop = False
 current_file = None
 
 
-def post_process_transcription(transcription: list) -> list:
+def extract_keywords_from_filename(filename: str) -> dict:
+    """
+    从文件名中提取关键词和信息，用于校准转录结果
+    返回包含清理后文件名、关键词列表和主题信息的字典
+    """
+    # 去除扩展名
+    name = re.sub(r'\.\w+$', '', filename)
+    # 去除开头的序号（如 01_、02-、第1集 等）
+    name = re.sub(r'^\d+[_\-]', '', name)
+    name = re.sub(r'^第\d+[集部章节]', '', name)
+
+    # 提取关键词（2字以上的词组）
+    keywords = re.findall(r'[\u4e00-\u9fff]{2,}', name)
+
+    # 提取可能的专有名词（括号内的内容）
+    brackets_content = re.findall(r'[（(]([^)）]+)[)）]', name)
+    special_terms = []
+    for content in brackets_content:
+        special_terms.extend(re.findall(r'[\u4e00-\u9fff]+', content))
+
+    return {
+        "clean_name": name,
+        "keywords": keywords,
+        "special_terms": special_terms,
+        "all_terms": keywords + special_terms
+    }
+
+
+def calibrate_transcription_with_filename(transcription: list, filename: str) -> list:
+    """
+    基于文件名校准转录结果
+    利用文件名中的主题信息来修正转录中的错误
+    """
+    if not transcription or not filename:
+        return transcription
+
+    file_info = extract_keywords_from_filename(filename)
+    clean_name = file_info["clean_name"]
+    all_terms = file_info["all_terms"]
+
+    if not all_terms:
+        return transcription
+
+    # 基于文件名的常见修正规则
+    corrections = []
+
+    # 如果文件名包含特定主题，添加相关修正
+    if '小篆' in clean_name or '篆' in clean_name:
+        corrections.extend([
+            (r'转篆', '小篆'),
+            (r'象形', '象形'),
+            (r'绳形', '绳形'),
+        ])
+
+    if '道德经' in clean_name or '德经' in clean_name:
+        corrections.extend([
+            (r'道(\w+)经', r'道德经'),
+        ])
+
+    # 处理同音异字问题（基于主题上下文）
+    theme_corrections = {
+        '行为': ['行为', '行为', '形为'],
+        '无为': ['无为', '无违'],
+        '道德': ['道德', '道得'],
+        '汉字': ['汉字', '汉子', '汉 字'],
+        '小篆': ['小篆', '小传', '小篆'],
+        '甲骨': ['甲骨', '甲古'],
+        '金文': ['金文', '今文'],
+        '隶书': ['隶书', '隶書'],
+        '楷书': ['楷书', '楷書', '开书'],
+        '草书': ['草书', '草書'],
+        '行书': ['行书', '行書'],
+    }
+
+    for term in all_terms:
+        if term in theme_corrections:
+            for wrong in theme_corrections[term]:
+                if wrong != term:
+                    corrections.append((wrong, term))
+
+    # 应用修正
+    for segment in transcription:
+        if 'text' in segment:
+            text = segment['text']
+
+            # 应用修正规则
+            for pattern, replacement in corrections:
+                text = re.sub(pattern, replacement, text)
+
+            segment['text'] = text.strip()
+
+    return transcription
+
+
+def post_process_transcription(transcription: list, filename: str = "") -> list:
     """
     后处理转录结果，修复方言、口音带来的常见问题
+    可选地基于文件名进行校准
     """
+    if not transcription:
+        return transcription
+
+    # 如果有文件名，先进行基于文件名的校准
+    if filename and STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
+        transcription = calibrate_transcription_with_filename(transcription, filename)
+
     if not STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
         return transcription
 
@@ -24,7 +126,7 @@ def post_process_transcription(transcription: list) -> list:
         (r'\s+得\s+', '得'),
         # 常见错别字修正常见方言口音问题
         (r'那吗', '那么'),
-        (r'那个', '那个'),
+        (r'这个', '这个'),
         (r'什么', '什么'),
         (r'怎么', '怎么'),
         (r'这样', '这样'),
@@ -72,7 +174,7 @@ def get_faster_whisper_model(model_size: str = None):
 
     return model_cache[model_size]
 
-def transcribe_with_faster_whisper(file_path: str, model_size: str = None):
+def transcribe_with_faster_whisper(file_path: str, model_size: str = None, filename: str = ""):
     """使用 Faster-Whisper 进行转录（方言/口音优化）"""
     if model_size is None:
         model_size = STT_CONFIG.get("whisper_model", "large")
@@ -104,7 +206,13 @@ def transcribe_with_faster_whisper(file_path: str, model_size: str = None):
         # 这个提示词包含常见方言特征，帮助模型更好识别
         dialect_prompt = STT_CONFIG.get("dialect_prompt", "")
         if dialect_prompt:
-            transcribe_kwargs["initial_prompt"] = dialect_prompt
+            # 如果有文件名，将其加入到提示词中
+            if filename:
+                file_info = extract_keywords_from_filename(filename)
+                context_hint = f"视频主题关键词：{', '.join(file_info['all_terms'][:5])}"
+                transcribe_kwargs["initial_prompt"] = f"{dialect_prompt}\n{context_hint}"
+            else:
+                transcribe_kwargs["initial_prompt"] = dialect_prompt
 
         print(f"🚀 使用 Faster-Whisper 进行转录（beam_size={transcribe_kwargs['beam_size']}, vad={vad_filter}）...")
 
@@ -123,9 +231,9 @@ def transcribe_with_faster_whisper(file_path: str, model_size: str = None):
                 "text": segment.text
             })
 
-        # 后处理
+        # 后处理（传递文件名用于校准）
         if transcription and STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
-            transcription = post_process_transcription(transcription)
+            transcription = post_process_transcription(transcription, filename)
 
         return transcription
     except ImportError:
@@ -182,7 +290,7 @@ def transcribe_with_openai(file_path: str):
     except Exception as e:
         raise Exception(f"OpenAI API 调用失败: {str(e)}")
 
-def transcribe_with_funasr(file_path: str):
+def transcribe_with_funasr(file_path: str, filename: str = ""):
     """使用 FunASR（阿里开源的中文语音识别模型）进行转录"""
     try:
         import torch
@@ -213,6 +321,11 @@ def transcribe_with_funasr(file_path: str):
         if hotwords_file and os.path.exists(hotwords_file):
             model_kwargs["hotword_file"] = hotwords_file
             print(f"📝 使用热词文件: {hotwords_file}")
+        elif filename:
+            # 从文件名提取关键词作为内置热词
+            file_info = extract_keywords_from_filename(filename)
+            if file_info["all_terms"]:
+                print(f"📝 使用文件主题关键词: {file_info['all_terms'][:5]}")
 
         model = AutoModel(**model_kwargs)
 
@@ -270,9 +383,9 @@ def transcribe_with_funasr(file_path: str):
                     "text": text
                 })
 
-        # 后处理：修复常见方言/口音问题
+        # 后处理：传递文件名用于基于主题的校准
         if transcription and STT_CONFIG.get("post_processing", {}).get("fix_common_errors", True):
-            transcription = post_process_transcription(transcription)
+            transcription = post_process_transcription(transcription, filename)
 
         print(f"✅ FunASR 转录完成！共 {len(transcription)} 个片段")
         return transcription
@@ -281,7 +394,7 @@ def transcribe_with_funasr(file_path: str):
     except Exception as e:
         raise Exception(f"FunASR 调用失败: {str(e)}")
 
-async def transcribe_audio(file_path: str, model_size: str = None) -> list:
+async def transcribe_audio(file_path: str, model_size: str = None, filename: str = "") -> list:
     """根据配置选择不同的转录引擎进行转录"""
     global should_stop, current_file
     should_stop = False
@@ -290,19 +403,19 @@ async def transcribe_audio(file_path: str, model_size: str = None) -> list:
     try:
         engine = STT_CONFIG.get("engine", "faster_whisper")
         print(f"🔍 使用转录引擎: {engine}")
-        
+
         # 根据引擎选择不同的转录方法
         if engine == "openai":
             transcription = await asyncio.to_thread(transcribe_with_openai, file_path)
         elif engine == "funasr":
-            transcription = await asyncio.to_thread(transcribe_with_funasr, file_path)
+            transcription = await asyncio.to_thread(transcribe_with_funasr, file_path, filename)
         else:  # 默认使用 faster_whisper
-            transcription = await asyncio.to_thread(transcribe_with_faster_whisper, file_path, model_size)
-        
+            transcription = await asyncio.to_thread(transcribe_with_faster_whisper, file_path, model_size, filename)
+
         if should_stop:
             current_file = None
             raise asyncio.CancelledError("Transcription cancelled")
-        
+
         current_file = None
         return transcription
 

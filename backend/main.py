@@ -40,15 +40,16 @@ async def upload_file(file: UploadFile = File(...)):
     global transcription_task
     try:
         # 保存上传的文件
+        original_filename = file.filename  # 保存原始文件名
         file_path = f"uploads/{file.filename}"
         os.makedirs("uploads", exist_ok=True)
-        
+
         with open(file_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
-        
-        # 创建转录任务
-        transcription_task = asyncio.create_task(transcribe_audio(file_path))
+
+        # 创建转录任务（传递文件名用于校准）
+        transcription_task = asyncio.create_task(transcribe_audio(file_path, None, original_filename))
         try:
             transcription = await transcription_task
             transcription_task = None
