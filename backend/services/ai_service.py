@@ -239,10 +239,10 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
             "format": "node_tree",
             "data": {
                 "id": "root",
-                "text": root_topic,
+                "topic": root_topic,
                 "children": [
-                    {"id": "sub1", "text": "子主题1", "direction": "left", "children": []},
-                    {"id": "sub2", "text": "子主题2", "direction": "right", "children": []}
+                    {"id": "sub1", "topic": "子主题1", "direction": "left", "children": []},
+                    {"id": "sub2", "topic": "子主题2", "direction": "right", "children": []}
                 ]
             }
         }
@@ -333,7 +333,7 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
             mindmap_data = json.loads(cleaned_response)
             if not all(key in mindmap_data for key in ['meta', 'format', 'data']):
                 raise ValueError("Missing required fields")
-            if not all(key in mindmap_data['data'] for key in ['id', 'text']):
+            if not all(key in mindmap_data['data'] for key in ['id', 'topic']):
                 raise ValueError("Missing required fields in data.data")
             print("[generate_mindmap] 思维导图生成成功")
             return json.dumps(mindmap_data, ensure_ascii=False)
@@ -344,8 +344,8 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
                 "format": "node_tree",
                 "data": {
                     "id": "root",
-                    "text": "无法生成思维导图",
-                    "children": [{"id": "error", "text": "生成失败，请重试", "direction": "right"}]
+                    "topic": "无法生成思维导图",
+                    "children": [{"id": "error", "topic": "生成失败，请重试", "direction": "right"}]
                 }
             }
             return json.dumps(error_mindmap, ensure_ascii=False)
