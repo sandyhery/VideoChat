@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, message, Menu, Dropdown } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import api from '../../utils/api';
+import SubtitleManager from '../SubtitleManager';
 
 const Export = ({ selectedFiles, currentFile, uploadedFiles }) => {
   // 导出转录结果
@@ -74,7 +75,7 @@ const Export = ({ selectedFiles, currentFile, uploadedFiles }) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${type}_${new Date().toISOString().slice(0, 10)}.md`;
+      a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_${type}.md`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -88,27 +89,48 @@ const Export = ({ selectedFiles, currentFile, uploadedFiles }) => {
   };
 
   // 导出思维导图
-  const handleExportMindmap = async () => {
+  const handleExportMindmap = async (format = 'json') => {
     if (!currentFile?.mindmapData) {
       message.warning('没有可导出的思维导图数据');
       return;
     }
 
     try {
-      const response = await api.exportMindmap(currentFile.mindmapData);
-
-      // 下载文件
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_mindmap.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      message.success('导出思维导图成功');
+      if (format === 'xmind') {
+        // 导出为 xmind 格式
+        const response = await api.exportMindmap(currentFile.mindmapData);
+        const contentDisposition = response.headers.get('content-disposition');
+        let filename = `${currentFile.name.replace(/\.[^/.]+$/, '')}_mindmap.xmind`;
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        message.success('导出思维导图(xmind)成功');
+      } else {
+        // 导出为 json 格式
+        const response = await api.exportMindmap(currentFile.mindmapData);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_mindmap.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        message.success('导出思维导图(json)成功');
+      }
     } catch (error) {
       console.error('Export mindmap failed:', error);
       message.error('导出思维导图失败：' + error.message);
@@ -364,45 +386,62 @@ const Export = ({ selectedFiles, currentFile, uploadedFiles }) => {
     </Menu>
   );
 
+  // 思维导图导出菜单项
+  const mindmapMenu = (
+    <Menu>
+      <Menu.Item key="json" onClick={() => handleExportMindmap('json')}>
+        导出为 JSON
+      </Menu.Item>
+      <Menu.Item key="xmind" onClick={() => handleExportMindmap('xmind')}>
+        导出为 XMind
+      </Menu.Item>
+    </Menu>
+  );
+
   return (
     <div className="export">
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Dropdown overlay={transcriptionMenu} disabled={selectedFiles.length === 0}>
           <Button icon={<DownloadOutlined />}>
             导出转录
           </Button>
         </Dropdown>
-        
+
         <Dropdown overlay={summaryMenu} disabled={!currentFile}>
           <Button icon={<DownloadOutlined />}>
             导出总结
           </Button>
         </Dropdown>
-        
-        <Button 
-          icon={<DownloadOutlined />} 
-          onClick={handleExportMindmap}
-          disabled={!currentFile?.mindmapData}
-        >
-          导出思维导图
-        </Button>
-        
-        <Button 
-          icon={<DownloadOutlined />} 
+
+        <Dropdown overlay={mindmapMenu} disabled={!currentFile?.mindmapData}>
+          <Button icon={<DownloadOutlined />} disabled={!currentFile?.mindmapData}>
+            导出思维导图
+          </Button>
+        </Dropdown>
+
+        <Button
+          icon={<DownloadOutlined />}
           onClick={handleExportMultimodalAnalysis}
           disabled={!currentFile?.multimodalAnalysis}
         >
           导出多模态分析
         </Button>
-        
-        <Button 
-          icon={<DownloadOutlined />} 
+
+        <Button
+          icon={<DownloadOutlined />}
           onClick={handleExportComprehensiveAnalysis}
           disabled={!currentFile?.comprehensiveAnalysis}
         >
           导出综合分析
         </Button>
       </div>
+
+      {/* 字幕管理面板 */}
+      {currentFile && (
+        <div style={{ marginTop: 16 }}>
+          <SubtitleManager currentFile={currentFile} />
+        </div>
+      )}
     </div>
   );
 };

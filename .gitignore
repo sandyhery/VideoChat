@@ -14,4 +14,18 @@ build/
 uploads/
 backend/config.py
 
-.DS_Store
+.DS_Store.claude/
+
+.claude/
+backend/analysis_results/
+backend/screenshots/
+backend/debug_bottom_enlarged.jpg backend/debug_bottom_region.jpg backend/debug_crop_inverted.jpg backend/debug_crop_original.jpg backend/debug_ocr_preprocessed.jpg backend/debug_screenshot_0001_5.00s.jpg backend/debug_screenshot_0002_10.00s.jpg backend/debug_screenshot.py backend/debug_screenshot2.py backend/debug_screenshot3.py backend/debug_screenshot4.py backend/debug_screenshot5.py backend/debug_subtitle.jpg backend/debug_upscaled.jpg
+
+# Large data directories
+backend/analysis_results/
+backend/screenshots/
+backend/debug_*.py
+backend/debug_*.jpg
+backend/backend.log
+frontend/frontend.log
+frontend/src/components/SubtitleManager/

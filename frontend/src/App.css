@@ -5,6 +5,36 @@
   box-sizing: border-box;
 }
 
+/* 篆体字体定义 */
+@font-face {
+  font-family: 'SealScript';
+  src: local('FZXiaoZhuanTi-S13T'),
+       local('FZZJ-ZCQXZJW'),
+       local('FZZJ-ZCQXZFW'),
+       local('HYZhiHaoTianGongZhuan'),
+       local('WDXZT'),
+       local('說文小篆'),
+       local('quanzikushuowenjiezi');
+}
+
+/* 篆体文字样式 */
+.seal-text,
+.markdown-content .seal-text,
+.seal-text span,
+span.seal-text {
+  font-family: 'SealScript', 'FZXiaoZhuanTi-S13T', 'FZZJ-ZCQXZJW', 'FZZJ-ZCQXZFW', 'HYZhiHaoTianGongZhuan', 'WDXZT', '說文小篆', 'quanzikushuowenjiezi', serif !important;
+  font-size: 1.15em !important;
+  color: #8B4513 !important;
+  font-weight: normal !important;
+  text-shadow: 0 0 1px rgba(139, 69, 19, 0.3);
+  background: linear-gradient(to right, #fdf6e3, #fef9f0);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #d4a574;
+  margin: 0 2px;
+  display: inline-block;
+}
+
 /* 应用整体布局 */
 .app-header {
   padding: 12px 20px;
@@ -970,28 +1000,62 @@ jmnode.important {
   margin-top: 24px;
   margin-bottom: 16px;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.4;
+  color: #1a1a1a;
+}
+
+.markdown-content h1 {
+  font-size: 24px;
+  border-bottom: 2px solid #e8e8e8;
+  padding-bottom: 12px;
+}
+
+.markdown-content h2 {
+  font-size: 20px;
+  border-bottom: 1px solid #e8e8e8;
+  padding-bottom: 8px;
+}
+
+.markdown-content h3 {
+  font-size: 16px;
 }
 
 .markdown-content p,
 .detailed-summary-content p {
   margin-bottom: 16px;
+  line-height: 1.9;
+  color: #333;
 }
 
 .markdown-content ul,
 .markdown-content ol,
 .detailed-summary-content ul,
 .detailed-summary-content ol {
-  padding-left: 20px;
+  padding-left: 24px;
   margin-bottom: 16px;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+}
+
+.markdown-content li {
+  margin-bottom: 8px;
+  line-height: 1.8;
 }
 
 .markdown-content blockquote,
 .detailed-summary-content blockquote {
-  padding: 0 16px;
-  color: #666;
-  border-left: 4px solid #ddd;
+  padding: 12px 16px;
+  color: #555;
+  border-left: 4px solid #52c41a;
+  background: #f6ffed;
   margin: 16px 0;
+  border-radius: 4px;
 }
 
 .markdown-content code,
@@ -1631,6 +1695,27 @@ jmnodes.theme-primary jmnode.selected {
   padding: 8px 16px;
   border-radius: 20px;
   transition: all 0.3s ease;
+}
+
+/* 多模态分析结果样式 */
+.multimodal-analysis-content {
+  flex: 1;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 8px;
+  overflow-y: auto;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.multimodal-analysis-content h3 {
+  margin-top: 16px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.multimodal-analysis-content p {
+  margin-bottom: 8px;
 }
 
 /* 响应式调整 */

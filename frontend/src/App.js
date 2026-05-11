@@ -1,13 +1,53 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Layout, Upload, Button, Input, Card, message, Table, Tabs, Pagination } from 'antd';
+import { Layout, Upload, Button, Input, Card, message, Table, Tabs, Pagination, Space } from 'antd';
 import { UploadOutlined, SendOutlined, SoundOutlined, SyncOutlined, DownloadOutlined, CopyOutlined, StopOutlined, DeleteOutlined, GithubOutlined } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
 import Mermaid from 'mermaid';
 import './App.css';
 import jsMind from 'jsmind';
 import 'jsmind/style/jsmind.css';
 
 const { TextArea } = Input;
+
+// 自定义组件来处理篆体标记 [seal]文字[seal]
+const SealText = ({ children }) => (
+    <span className="seal-text">{children}</span>
+);
+
+// 解析Markdown内容，将[seal]标记转换为篆体组件
+const parseSealMarkdown = (content) => {
+    if (!content) return '';
+    // 将 [seal]文字[/seal] 转换为 <span class="seal-text">文字</span>
+    // 处理可能包含引号等特殊字符的内容
+    let result = content;
+    const regex = /\[seal\]([\s\S]*?)\[\/seal\]/g;
+    result = result.replace(regex, (match, text) => {
+        // 去除文字两侧可能的引号
+        const cleanText = text.replace(/^[""'']+|[""'']+$/g, '');
+        return '<span class="seal-text">' + cleanText + '</span>';
+    });
+    return result;
+};
+
+// 修改后的Markdown组件，支持篆体标记
+const SealMarkdown = ({ content }) => {
+    const [html, setHtml] = useState('');
+
+    useEffect(() => {
+        if (content) {
+            const parsed = parseSealMarkdown(content);
+            setHtml(parsed);
+        }
+    }, [content]);
+
+    if (!content) return null;
+
+    return (
+        <div
+            className="markdown-content"
+            dangerouslySetInnerHTML={{ __html: html }}
+        />
+    );
+};
 
 // 修改内容展示组件
 const SummaryContent = ({ fileId, content, isLoading }) => {
@@ -16,7 +56,7 @@ const SummaryContent = ({ fileId, content, isLoading }) => {
     // 直接使用传入的 content，不再使用本地状态
     return (
         <div key={fileId} id={containerId} className="markdown-content">
-            <ReactMarkdown>{content || ''}</ReactMarkdown>
+            <SealMarkdown content={content || ''} />
         </div>
     );
 };
@@ -26,7 +66,7 @@ const DetailedSummaryContent = ({ fileId, content, isLoading }) => {
 
     return (
         <div key={fileId} id={containerId} className="markdown-content detailed-summary-content">
-            <ReactMarkdown>{content || ''}</ReactMarkdown>
+            <SealMarkdown content={content || ''} />
         </div>
     );
 };
@@ -124,6 +164,10 @@ function App() {
     const [detailedSummaryLoadingFiles, setDetailedSummaryLoadingFiles] = useState(new Set());
     const [multimodalLoadingFiles, setMultimodalLoadingFiles] = useState(new Set());
     const [comprehensiveLoadingFiles, setComprehensiveLoadingFiles] = useState(new Set());
+    const [editingTranscriptionIndex, setEditingTranscriptionIndex] = useState(null);  // 当前编辑的转录索引
+    const [editingTranscriptionText, setEditingTranscriptionText] = useState('');      // 编辑中的转录文本
+    const [editingTranscriptionFont, setEditingTranscriptionFont] = useState('default'); // 编辑时的字体
+    const [isAddingPunctuation, setIsAddingPunctuation] = useState(false);           // 是否正在添加标点
 
     // 打印 uploadedFiles 的变化
     useEffect(() => {
@@ -310,7 +354,7 @@ function App() {
             setAbortTranscribing(true);
 
             try {
-                const response = await fetch('http://localhost:8001/api/stop-transcribe', {
+                const response = await fetch('http://localhost:8100/api/stop-transcribe', {
                     method: 'POST',
                 });
 
@@ -375,7 +419,7 @@ function App() {
                     const formData = new FormData();
                     formData.append('file', file.file, file.name);
 
-                    const response = await fetch('http://localhost:8001/api/upload', {
+                    const response = await fetch('http://localhost:8100/api/upload', {
                         method: 'POST',
                         body: formData,
                     });
@@ -397,24 +441,49 @@ function App() {
                     }
 
                     if (!abortTranscribing) {  // 添加检查，确保没有中断请求
-                        setUploadedFiles(prev => {
-                            const newFiles = prev.map(f =>
+                        // 自动添加标点和分段
+                        fetch('http://localhost:8100/api/punctuation', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ transcription: data.transcription }),
+                        }).then(punctResponse => {
+                            if (punctResponse.ok) {
+                                return punctResponse.json();
+                            }
+                            throw new Error('添加标点失败');
+                        }).then(punctData => {
+                            const punctuatedTranscription = punctData.transcription;
+                            setUploadedFiles(prev => prev.map(f =>
+                                f.id === fileId ? {
+                                    ...f,
+                                    status: 'done',
+                                    transcription: punctuatedTranscription
+                                } : f
+                            ));
+                            if (currentFile?.id === fileId) {
+                                setCurrentFile(prev => ({
+                                    ...prev,
+                                    status: 'done',
+                                    transcription: punctuatedTranscription
+                                }));
+                            }
+                        }).catch(punctError => {
+                            // 标点添加失败时，使用原始转录结果
+                            setUploadedFiles(prev => prev.map(f =>
                                 f.id === fileId ? {
                                     ...f,
                                     status: 'done',
                                     transcription: data.transcription
                                 } : f
-                            );
-                            return newFiles;
+                            ));
+                            if (currentFile?.id === fileId) {
+                                setCurrentFile(prev => ({
+                                    ...prev,
+                                    status: 'done',
+                                    transcription: data.transcription
+                                }));
+                            }
                         });
-
-                        if (currentFile?.id === fileId) {
-                            setCurrentFile(prev => ({
-                                ...prev,
-                                status: 'done',
-                                transcription: data.transcription
-                            }));
-                        }
                     }
                 } catch (error) {
                     if (!abortTranscribing) {  // 添加检查，确保没有中断请求
@@ -469,7 +538,7 @@ function App() {
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
 
-            const response = await fetch('http://localhost:8001/api/summary', {
+            const response = await fetch('http://localhost:8100/api/summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text }),
@@ -560,7 +629,7 @@ function App() {
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
 
-            const response = await fetch('http://localhost:8001/api/mindmap', {
+            const response = await fetch('http://localhost:8100/api/mindmap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text }),
@@ -695,7 +764,7 @@ function App() {
         abortController.current = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8001/api/chat', {
+            const response = await fetch('http://localhost:8100/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -721,7 +790,38 @@ function App() {
                     if (done) break;
 
                     const chunk = new TextDecoder().decode(value);
-                    aiResponse += chunk;
+                    // 解析 SSE 格式的数据
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const dataStr = line.slice(6);
+                            if (dataStr === '[DONE]') continue;
+                            try {
+                                const data = JSON.parse(dataStr);
+                                if (data.choices && data.choices[0].delta && data.choices[0].delta.content !== undefined) {
+                                    let content = data.choices[0].delta.content;
+                                    // 跳过空内容或 think 标签
+                                    if (!content || content === '<think>' || content === '') {
+                                        continue;
+                                    }
+                                    // 解码 Unicode 转义序列
+                                    if (typeof content === 'string' && content.includes('\\u')) {
+                                        try {
+                                            // 使用正则替换 \\uXXXX 为实际字符
+                                            content = content.replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
+                                                return String.fromCharCode(parseInt(hex, 16));
+                                            });
+                                        } catch (e) {
+                                            // 忽略解码错误
+                                        }
+                                    }
+                                    aiResponse += content;
+                                }
+                            } catch (e) {
+                                // 忽略解析错误
+                            }
+                        }
+                    }
 
                     setMessages([
                         ...currentMessages,
@@ -774,7 +874,7 @@ function App() {
             title: '时间点',
             dataIndex: 'time',
             key: 'time',
-            width: '30%',
+            width: '25%',
             render: (_, record) => (
                 <Button
                     type="link"
@@ -789,6 +889,95 @@ function App() {
             title: '内容',
             dataIndex: 'text',
             key: 'text',
+            render: (text, record, index) => {
+                if (editingTranscriptionIndex === index) {
+                    // 字体样式映射
+                    const fontStyleMap = {
+                        'default': {},
+                        'zhuyin': { fontFamily: 'ZhuyinScript, MaShanZheng, STKaiti, KaiTi, serif' },
+                        'seal': { fontFamily: 'STKaiti, KaiTi, MaShanZheng, serif', fontSize: '18px' },
+                        'xingshu': { fontFamily: 'STXingkai, Xingkai, cursive, serif', fontSize: '16px' },
+                        'caoshu': { fontFamily: 'STCaoti, MaShanZheng, cursive, serif', fontSize: '18px' }
+                    };
+                    const currentFontStyle = fontStyleMap[editingTranscriptionFont] || {};
+
+                    return (
+                        <div>
+                            <div style={{ marginBottom: '8px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <select
+                                    value={editingTranscriptionFont}
+                                    onChange={(e) => setEditingTranscriptionFont(e.target.value)}
+                                    style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        border: '1px solid #d9d9d9',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="default">默认字体</option>
+                                    <option value="zhuyin">篆文/篆书</option>
+                                    <option value="seal">楷书/楷体</option>
+                                    <option value="xingshu">行书</option>
+                                    <option value="caoshu">草书</option>
+                                </select>
+                                <span style={{ fontSize: '12px', color: '#888' }}>选择字体</span>
+                            </div>
+                            <TextArea
+                                value={editingTranscriptionText}
+                                onChange={(e) => setEditingTranscriptionText(e.target.value)}
+                                autoSize={{ minRows: 2, maxRows: 10 }}
+                                style={{
+                                    width: '100%',
+                                    fontSize: '14px',
+                                    lineHeight: '1.8',
+                                    marginBottom: '8px',
+                                    ...currentFontStyle
+                                }}
+                                placeholder="支持多行输入，每行一段..."
+                            />
+                            <div style={{ fontSize: '12px', color: '#888' }}>
+                                每行按 Enter 断开为独立段落 | 选择篆文字体可输入古文字
+                            </div>
+                        </div>
+                    );
+                }
+                // 富文本显示：支持换行和段落，根据内容选择字体（篆文内容使用特殊字体）
+                return (
+                    <div
+                        style={{
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            lineHeight: '1.8',
+                            fontSize: '14px',
+                            padding: '4px 0'
+                        }}
+                    >
+                        {text}
+                    </div>
+                );
+            },
+        },
+        {
+            title: '操作',
+            key: 'action',
+            width: '120px',
+            render: (_, record, index) => (
+                editingTranscriptionIndex === index ? (
+                    <Space>
+                        <Button size="small" type="primary" onClick={handleSaveTranscription}>
+                            保存
+                        </Button>
+                        <Button size="small" onClick={handleCancelEditTranscription}>
+                            取消
+                        </Button>
+                    </Space>
+                ) : (
+                    <Button size="small" onClick={() => handleStartEditTranscription(index, record.text)}>
+                        编辑
+                    </Button>
+                )
+            ),
         },
     ];
 
@@ -815,7 +1004,7 @@ function App() {
                 }
 
                 try {
-                    const response = await fetch(`http://localhost:8001/api/export/${format}`, {
+                    const response = await fetch(`http://localhost:8100/api/export/${format}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -861,6 +1050,81 @@ function App() {
         }
     };
 
+    // 开始编辑转录
+    const handleStartEditTranscription = (index, text) => {
+        setEditingTranscriptionIndex(index);
+        setEditingTranscriptionText(text);
+        setEditingTranscriptionFont('default');  // 重置字体选择
+    };
+
+    // 保存编辑的转录
+    const handleSaveTranscription = () => {
+        if (editingTranscriptionIndex === null || !currentFile) return;
+
+        const newTranscription = [...currentFile.transcription];
+        newTranscription[editingTranscriptionIndex] = {
+            ...newTranscription[editingTranscriptionIndex],
+            text: editingTranscriptionText
+        };
+
+        // 更新 uploadedFiles 中的数据
+        setUploadedFiles(prev => prev.map(f =>
+            f.id === currentFile.id ? { ...f, transcription: newTranscription } : f
+        ));
+
+        // 更新 currentFile
+        setCurrentFile(prev => ({ ...prev, transcription: newTranscription }));
+
+        // 清空编辑状态
+        setEditingTranscriptionIndex(null);
+        setEditingTranscriptionText('');
+
+        message.success('转录内容已更新');
+    };
+
+    // 取消编辑
+    const handleCancelEditTranscription = () => {
+        setEditingTranscriptionIndex(null);
+        setEditingTranscriptionText('');
+    };
+
+    // 添加标点符号和分段
+    const handleAddPunctuation = async () => {
+        if (!currentFile?.transcription || currentFile.transcription.length === 0) {
+            message.warning('没有可处理的转录内容');
+            return;
+        }
+
+        setIsAddingPunctuation(true);
+        try {
+            const response = await fetch('http://localhost:8100/api/punctuation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transcription: currentFile.transcription }),
+            });
+
+            if (!response.ok) {
+                throw new Error('添加标点失败');
+            }
+
+            const data = await response.json();
+
+            // 更新文件对象中的转录数据
+            const newTranscription = data.transcription;
+            setUploadedFiles(prev => prev.map(f =>
+                f.id === currentFile.id ? { ...f, transcription: newTranscription } : f
+            ));
+            setCurrentFile(prev => ({ ...prev, transcription: newTranscription }));
+
+            message.success('标点添加成功');
+        } catch (error) {
+            console.error('添加标点失败:', error);
+            message.error('添加标点失败：' + error.message);
+        } finally {
+            setIsAddingPunctuation(false);
+        }
+    };
+
     // 修改详细总结函数
     const handleDetailedSummary = async () => {
         if (!checkTranscription()) return;
@@ -886,7 +1150,7 @@ function App() {
             // 强制更新 uploadedFiles 以触发重渲染
             setUploadedFiles([...uploadedFiles]);
 
-            const response = await fetch('http://localhost:8001/api/detailed-summary', {
+            const response = await fetch('http://localhost:8100/api/detailed-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text }),
@@ -960,7 +1224,7 @@ function App() {
         }
 
         try {
-            const response = await fetch(`http://localhost:8001/api/export/summary`, {
+            const response = await fetch(`http://localhost:8100/api/export/summary`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -977,7 +1241,7 @@ function App() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${type}_${new Date().toISOString().slice(0, 10)}.md`;
+            a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_${type}.md`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -1013,7 +1277,7 @@ function App() {
                 f.id === fileId ? { ...f, multimodalAnalysis: null } : f
             ));
 
-            const response = await fetch('http://localhost:8001/api/multimodal-analysis', {
+            const response = await fetch('http://localhost:8100/api/multimodal-analysis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1030,12 +1294,17 @@ function App() {
 
             const data = await response.json();
 
+            // 如果有修正后的转录结果，更新转录
+            if (data.corrected_transcription && data.corrected_transcription.length > 0) {
+                data.transcription = data.corrected_transcription;
+            }
+
             // 更新文件对象中的多模态分析数据
             setUploadedFiles(prev => prev.map(f =>
-                f.id === fileId ? { ...f, multimodalAnalysis: data } : f
+                f.id === fileId ? { ...f, multimodalAnalysis: data, transcription: data.transcription || f.transcription } : f
             ));
             if (currentFile.id === fileId) {
-                setCurrentFile(prev => ({ ...prev, multimodalAnalysis: data }));
+                setCurrentFile(prev => ({ ...prev, multimodalAnalysis: data, transcription: data.transcription || prev.transcription }));
             }
 
             message.success('多模态分析完成');
@@ -1075,16 +1344,17 @@ function App() {
                 f.id === fileId ? { ...f, comprehensiveAnalysis: null } : f
             ));
 
-            message.loading('正在进行综合分析（包含详细总结和多模态分析）...', 0);
+            message.loading('正在进行综合分析（包含详细总结、多模态分析和对话讨论）...', 0);
 
-            const response = await fetch('http://localhost:8001/api/comprehensive-analysis', {
+            const response = await fetch('http://localhost:8100/api/comprehensive-analysis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     video_path: `uploads/${currentFile.name}`,
                     transcription: currentFile.transcription,
                     screenshot_method: 'interval',
-                    screenshot_interval: 5
+                    screenshot_interval: 5,
+                    chat_history: messages,  // 传递对话历史
                 }),
             });
 
@@ -1096,12 +1366,17 @@ function App() {
 
             const data = await response.json();
 
+            // 如果有修正后的转录结果，更新转录
+            if (data.corrected_transcription && data.corrected_transcription.length > 0) {
+                data.transcription = data.corrected_transcription;
+            }
+
             // 更新文件对象中的综合分析数据
             setUploadedFiles(prev => prev.map(f =>
-                f.id === fileId ? { ...f, comprehensiveAnalysis: data } : f
+                f.id === fileId ? { ...f, comprehensiveAnalysis: data, transcription: data.transcription || f.transcription } : f
             ));
             if (currentFile.id === fileId) {
-                setCurrentFile(prev => ({ ...prev, comprehensiveAnalysis: data }));
+                setCurrentFile(prev => ({ ...prev, comprehensiveAnalysis: data, transcription: data.transcription || prev.transcription }));
             }
 
             message.success('综合分析完成');
@@ -1129,7 +1404,7 @@ function App() {
         const analysis = currentFile.comprehensiveAnalysis;
 
         let markdownContent = `# 视频综合分析报告\n\n`;
-        markdownContent += `**文件名称**: ${currentFile.name}\n\n`;
+        markdownContent += `**文件名称**: ${analysis.filename || currentFile.name}\n\n`;
         markdownContent += `**导出时间**: ${new Date().toLocaleString()}\n\n`;
         markdownContent += `---\n\n`;
 
@@ -1183,7 +1458,8 @@ function App() {
             if (ocrTextCount > 0) {
                 markdownContent += `识别到 ${ocrTextCount} 张含文字的截图\n\n`;
 
-                for (let i = 0; i < analysis.ocr_results.length && i < 10; i++) {
+                // 显示所有OCR结果
+                for (let i = 0; i < analysis.ocr_results.length; i++) {
                     const ocrResult = analysis.ocr_results[i];
                     if (ocrResult.text && ocrResult.text.trim()) {
                         const screenshot = analysis.screenshots && analysis.screenshots[i]
@@ -1192,10 +1468,6 @@ function App() {
                         markdownContent += `### ${screenshot}\n\n`;
                         markdownContent += `${ocrResult.text.trim()}\n\n`;
                     }
-                }
-
-                if (ocrTextCount > 10) {
-                    markdownContent += `*还有 ${ocrTextCount - 10} 张截图的识别结果未显示*\n\n`;
                 }
             }
         }
@@ -1206,13 +1478,36 @@ function App() {
             markdownContent += `## 字幕识别结果\n\n`;
             markdownContent += `检测到 ${analysis.subtitle_results.length} 处字幕\n\n`;
 
-            for (let i = 0; i < analysis.subtitle_results.length && i < 20; i++) {
+            // 显示所有字幕
+            for (let i = 0; i < analysis.subtitle_results.length; i++) {
                 const subtitle = analysis.subtitle_results[i];
                 markdownContent += `**[${subtitle.time.toFixed(1)}秒]**: ${subtitle.text}\n\n`;
             }
 
-            if (analysis.subtitle_results.length > 20) {
-                markdownContent += `*还有 ${analysis.subtitle_results.length - 20} 处字幕未显示*\n\n`;
+            // 显示修正后的转录结果
+            if (analysis.corrected_transcription && analysis.corrected_transcription.length > 0) {
+                markdownContent += `---\n\n`;
+                markdownContent += `## 字幕校正后的转录结果\n\n`;
+                markdownContent += `共 ${analysis.corrected_transcription.length} 条记录\n\n`;
+
+                for (let i = 0; i < analysis.corrected_transcription.length; i++) {
+                    const item = analysis.corrected_transcription[i];
+                    const startTime = item.start !== undefined ? item.start : (item.time || 0);
+                    const endTime = item.end !== undefined ? item.end : (item.start || 0) + 1;
+                    markdownContent += `**[${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s]**\n\n`;
+                    markdownContent += `${item.text}\n\n`;
+                }
+            }
+        }
+
+        // 对话交互记录
+        if (analysis.chat_history && analysis.chat_history.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 对话讨论记录\n\n`;
+            for (let i = 0; i < analysis.chat_history.length; i++) {
+                const msg = analysis.chat_history[i];
+                const role = msg.role === 'user' ? '用户' : 'AI助手';
+                markdownContent += `**${role}**: ${msg.content}\n\n`;
             }
         }
 
@@ -1242,6 +1537,189 @@ function App() {
             .catch(() => {
                 message.error('复制失败');
             });
+    };
+
+    // 导出字幕和校对结果
+    const handleExportSubtitles = () => {
+        if (!currentFile?.multimodalAnalysis) {
+            message.warning('没有可导出的多模态分析结果');
+            return;
+        }
+
+        const analysis = currentFile.multimodalAnalysis;
+
+        let markdownContent = `# 字幕与校对报告\n\n`;
+        markdownContent += `**文件名称**: ${currentFile.name}\n\n`;
+        markdownContent += `**导出时间**: ${new Date().toLocaleString()}\n\n`;
+        markdownContent += `---\n\n`;
+
+        // OCR识别结果
+        if (analysis.ocr_results && analysis.ocr_results.length > 0) {
+            markdownContent += `## OCR识别结果\n\n`;
+            const ocrTextCount = analysis.ocr_results.filter(r => r.text && r.text.trim()).length;
+            markdownContent += `识别到 ${ocrTextCount} 张含文字的截图\n\n`;
+
+            for (let i = 0; i < analysis.ocr_results.length; i++) {
+                const ocrResult = analysis.ocr_results[i];
+                if (ocrResult.text && ocrResult.text.trim()) {
+                    const time = ocrResult.time !== undefined ? ocrResult.time : 0;
+                    markdownContent += `### 第${i+1}张截图 (${time.toFixed(1)}秒)\n\n`;
+                    markdownContent += `${ocrResult.text.trim()}\n\n`;
+                }
+            }
+            markdownContent += `\n`;
+        }
+
+        // 字幕识别结果
+        if (analysis.subtitle_results && analysis.subtitle_results.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 字幕识别结果\n\n`;
+            markdownContent += `检测到 ${analysis.subtitle_results.length} 处字幕\n\n`;
+
+            for (let i = 0; i < analysis.subtitle_results.length; i++) {
+                const subtitle = analysis.subtitle_results[i];
+                markdownContent += `**[${subtitle.time.toFixed(1)}秒]**: ${subtitle.text}\n\n`;
+            }
+            markdownContent += `\n`;
+        }
+
+        // 修正后的转录结果
+        if (analysis.corrected_transcription && analysis.corrected_transcription.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 字幕校正后的转录结果\n\n`;
+            markdownContent += `共 ${analysis.corrected_transcription.length} 条记录\n\n`;
+
+            for (let i = 0; i < analysis.corrected_transcription.length; i++) {
+                const item = analysis.corrected_transcription[i];
+                const startTime = item.start !== undefined ? item.start : (item.time || 0);
+                const endTime = item.end !== undefined ? item.end : (item.start || 0) + 1;
+                markdownContent += `**[${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s]**\n\n`;
+                markdownContent += `${item.text}\n\n`;
+            }
+        }
+
+        markdownContent += `---\n\n`;
+        markdownContent += `*报告由 VideoChat 多模态分析系统生成*\n`;
+
+        const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_字幕报告.md`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        message.success('导出字幕报告成功');
+    };
+
+    // 导出多模态分析报告
+    const handleExportMultimodalAnalysis = () => {
+        if (!currentFile?.multimodalAnalysis) {
+            message.warning('没有可导出的多模态分析结果');
+            return;
+        }
+
+        const analysis = currentFile.multimodalAnalysis;
+
+        let markdownContent = `# 视频多模态分析报告\n\n`;
+        markdownContent += `**文件名称**: ${currentFile.name}\n\n`;
+        markdownContent += `**导出时间**: ${new Date().toLocaleString()}\n\n`;
+        markdownContent += `---\n\n`;
+
+        markdownContent += `## 视频基本信息\n\n`;
+        markdownContent += `- **时长**: ${analysis.video_info.duration.toFixed(2)}秒\n`;
+        markdownContent += `- **分辨率**: ${analysis.video_info.width}x${analysis.video_info.height}\n`;
+        markdownContent += `- **帧率**: ${analysis.video_info.fps.toFixed(1)}fps\n`;
+        if (analysis.video_info.codec) {
+            markdownContent += `- **编码**: ${analysis.video_info.codec}\n`;
+        }
+        markdownContent += `- **截图数量**: ${analysis.screenshot_count}张\n\n`;
+
+        markdownContent += `---\n\n`;
+
+        markdownContent += `## 综合分析总结\n\n`;
+        markdownContent += `${analysis.analysis.summary}\n\n`;
+
+        if (analysis.analysis.mindmap) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 分析思维导图\n\n`;
+            markdownContent += `*思维导图数据已包含在导出文件中，可使用思维导图工具查看*\n\n`;
+
+            try {
+                const mindmapJson = typeof analysis.analysis.mindmap === 'string'
+                    ? analysis.analysis.mindmap
+                    : JSON.stringify(analysis.analysis.mindmap, null, 2);
+                markdownContent += `\`\`\`json\n${mindmapJson}\n\`\`\`\n\n`;
+            } catch (e) {
+                markdownContent += `*思维导图数据格式化失败*\n\n`;
+            }
+        }
+
+        if (analysis.ocr_results && analysis.ocr_results.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## OCR识别结果\n\n`;
+
+            const ocrTextCount = analysis.ocr_results.filter(r => r.text && r.text.trim()).length;
+            if (ocrTextCount > 0) {
+                markdownContent += `识别到 ${ocrTextCount} 张含文字的截图\n\n`;
+
+                // 显示所有OCR结果
+                for (let i = 0; i < analysis.ocr_results.length; i++) {
+                    const ocrResult = analysis.ocr_results[i];
+                    if (ocrResult.text && ocrResult.text.trim()) {
+                        const screenshot = analysis.screenshots && analysis.screenshots[i]
+                            ? ` (第${i+1}张截图, ${analysis.screenshots[i].time.toFixed(1)}秒)`
+                            : ` (第${i+1}张截图)`;
+                        markdownContent += `### ${screenshot}\n\n`;
+                        markdownContent += `${ocrResult.text.trim()}\n\n`;
+                    }
+                }
+            }
+        }
+
+        if (analysis.subtitle_results && analysis.subtitle_results.length > 0) {
+            markdownContent += `---\n\n`;
+            markdownContent += `## 字幕识别结果\n\n`;
+            markdownContent += `检测到 ${analysis.subtitle_results.length} 处字幕\n\n`;
+
+            // 显示所有字幕
+            for (let i = 0; i < analysis.subtitle_results.length; i++) {
+                const subtitle = analysis.subtitle_results[i];
+                markdownContent += `**[${subtitle.time.toFixed(1)}秒]**: ${subtitle.text}\n\n`;
+            }
+
+            // 显示修正后的转录结果
+            if (analysis.corrected_transcription && analysis.corrected_transcription.length > 0) {
+                markdownContent += `---\n\n`;
+                markdownContent += `## 字幕校正后的转录结果\n\n`;
+                markdownContent += `共 ${analysis.corrected_transcription.length} 条记录\n\n`;
+
+                for (let i = 0; i < analysis.corrected_transcription.length; i++) {
+                    const item = analysis.corrected_transcription[i];
+                    const startTime = item.start !== undefined ? item.start : (item.time || 0);
+                    const endTime = item.end !== undefined ? item.end : (item.start || 0) + 1;
+                    markdownContent += `**[${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s]**\n\n`;
+                    markdownContent += `${item.text}\n\n`;
+                }
+            }
+        }
+
+        markdownContent += `---\n\n`;
+        markdownContent += `*报告由 VideoChat 多模态分析系统生成*\n`;
+
+        const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_multimodal_analysis.md`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        message.success('导出多模态分析报告成功');
     };
 
     // 添加滚动处理函数
@@ -1334,6 +1812,13 @@ function App() {
                                     TXT
                                 </Button>
                             </Button.Group>
+                            <Button
+                                onClick={handleAddPunctuation}
+                                disabled={!currentFile?.transcription || isAddingPunctuation}
+                                loading={isAddingPunctuation}
+                            >
+                                {isAddingPunctuation ? '处理中...' : '添加标点'}
+                            </Button>
                         </div>
                     </div>
                     {!currentFile ? (
@@ -1532,7 +2017,7 @@ function App() {
                                     >
                                         <div className="message-bubble">
                                             <div className="message-content">
-                                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                                <SealMarkdown content={msg.content} />
                                             </div>
                                             <Button
                                                 type="text"
@@ -1600,6 +2085,22 @@ function App() {
                         >
                             {multimodalLoadingFiles.has(currentFile?.id) ? '分析中...' : '开始多模态分析'}
                         </Button>
+                        {currentFile?.multimodalAnalysis && (
+                            <>
+                                <Button
+                                    onClick={handleExportMultimodalAnalysis}
+                                    icon={<DownloadOutlined />}
+                                >
+                                    导出MD
+                                </Button>
+                                <Button
+                                    onClick={handleExportSubtitles}
+                                    icon={<DownloadOutlined />}
+                                >
+                                    字幕MD
+                                </Button>
+                            </>
+                        )}
                     </div>
                     {!currentFile ? (
                         <div className="empty-state">
@@ -1619,15 +2120,13 @@ function App() {
                             <p>正在进行多模态分析，请稍候...</p>
                         </div>
                     ) : (
-                        <div className="multimodal-analysis-content">
-                            <h3>分析结果</h3>
-                            <p><strong>视频时长：</strong>{currentFile.multimodalAnalysis.video_info.duration.toFixed(2)}秒</p>
-                            <p><strong>分辨率：</strong>{currentFile.multimodalAnalysis.video_info.width}x{currentFile.multimodalAnalysis.video_info.height}</p>
-                            <p><strong>帧率：</strong>{currentFile.multimodalAnalysis.video_info.fps.toFixed(1)}fps</p>
-                            <p><strong>截图数量：</strong>{currentFile.multimodalAnalysis.screenshot_count}张</p>
-
-                            <h3>分析总结</h3>
-                            <ReactMarkdown>{currentFile.multimodalAnalysis.analysis.summary}</ReactMarkdown>
+                        <div className="multimodal-analysis-content" style={{ padding: '20px', background: '#fff', borderRadius: '8px' }}>
+                            {/* 分析总结 */}
+                            {currentFile.multimodalAnalysis.analysis?.summary && (
+                                <div className="analysis-summary" style={{ lineHeight: '1.8', fontSize: '14px' }}>
+                                    <SealMarkdown content={currentFile.multimodalAnalysis.analysis.summary} />
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1690,14 +2189,14 @@ function App() {
                             <p><strong>字幕数：</strong>{currentFile.comprehensiveAnalysis.statistics.subtitle_count}条</p>
 
                             <h3>详细总结</h3>
-                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
-                                {currentFile.comprehensiveAnalysis.detailed_summary}
-                            </pre>
+                            <div style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                                <SealMarkdown content={currentFile.comprehensiveAnalysis.detailed_summary} />
+                            </div>
 
                             <h3>多模态分析总结</h3>
-                            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
-                                {currentFile.comprehensiveAnalysis.analysis_summary}
-                            </pre>
+                            <div style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto' }}>
+                                <SealMarkdown content={currentFile.comprehensiveAnalysis.analysis_summary} />
+                            </div>
                         </div>
                     )}
                 </div>

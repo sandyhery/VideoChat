@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Optional
 from datetime import datetime
 from services.video_analysis_service import extract_screenshots, get_video_info
-from services.ocr_service import extract_text_from_images, detect_subtitles
+from services.paddleocr_service import extract_text_from_images, detect_subtitles, normalize_chinese_text, filter_paddle_ocr_results
 from services.ai_service import generate_summary, generate_mindmap
 import asyncio
 
@@ -36,14 +36,13 @@ class MultimodalAnalysisService:
         try:
             print(f"开始分析视频: {video_path}")
             
-            # 生成缓存键
+            # 生成缓存键（已禁用缓存）
             cache_key = f"{video_path}_{screenshot_method}_{screenshot_interval}_{screenshot_threshold}"
-            
-            # 检查缓存
-            if use_cache and cache_key in self.cache:
+
+            # 检查缓存（已禁用，总是重新分析）
+            if False and use_cache and cache_key in self.cache:
                 print("使用缓存结果")
                 return self.cache[cache_key]
-            elif not use_cache:
                 print("跳过缓存，重新分析")
             
             # 检查视频文件是否存在
@@ -58,78 +57,111 @@ class MultimodalAnalysisService:
             # 2. 提取视频截图
             print("提取视频截图...")
             screenshots = extract_screenshots(
-                video_path, 
-                method=screenshot_method, 
-                interval=screenshot_interval, 
+                video_path,
+                method=screenshot_method,
+                interval=screenshot_interval,
                 threshold=screenshot_threshold
             )
             print(f"提取了 {len(screenshots)} 张截图")
-            
-            # 3. 对截图进行OCR分析（并行处理）
-            print("进行OCR分析...")
+
+            # 2.5 OCR 扫描所有截图
+            print("OCR 扫描所有截图...")
             image_paths = [screenshot["path"] for screenshot in screenshots]
-            
+
+            # 使用 RapidOCR 扫描所有截图（只扫描字幕区域）
+            all_ocr_results = []
             try:
-                ocr_results = extract_text_from_images(image_paths)
-                print(f"OCR分析完成，处理了 {len(ocr_results)} 张图片")
+                from services.paddleocr_service import extract_text_from_images, normalize_chinese_text
+                all_ocr_results = extract_text_from_images(image_paths, region='subtitle')
             except Exception as e:
-                print(f"OCR分析失败: {e}")
-                # 如果OCR失败，使用空结果继续
-                ocr_results = []
-                for screenshot in screenshots:
-                    ocr_results.append({
-                        "text": "",
-                        "boxes": [],
-                        "confidence": 0.0,
-                        "image_path": screenshot["path"]
-                    })
-                print(f"创建了 {len(ocr_results)} 个空OCR结果")
-            
-            # 4. 检测字幕（并行处理）
-            print("检测字幕...")
+                print(f"OCR 扫描失败: {e}")
+
+            # 直接使用所有 OCR 结果，不做去重
+            ocr_results = all_ocr_results
+
+            # 3. 规范化并过滤 OCR 结果
+            print("规范化并过滤 OCR 结果...")
+
+            # 为截图添加时间信息，便于 OCR 结果关联
+            screenshot_time_map = {s["path"]: s["time"] for s in screenshots}
+
+            # 规范化并过滤 OCR 结果（降低阈值以保留更多结果）
+            filtered_results = []
+            for ocr in ocr_results:
+                text = ocr.get('text', '').strip()
+                if text:
+                    normalized_text = normalize_chinese_text(text, 'simplified')
+                    ocr['text'] = normalized_text
+                    filtered_results.append(ocr)
+
+            # 降低置信度阈值到 0.3，最小长度降到 2
+            ocr_results = filter_paddle_ocr_results(filtered_results, min_length=2, min_confidence=0.3)
+            print(f"OCR分析完成，过滤后剩余 {len(ocr_results)} 张有效图片")
+
+            # 为 OCR 结果添加时间信息
+            for ocr in ocr_results:
+                if ocr.get("image_path") in screenshot_time_map:
+                    ocr["time"] = screenshot_time_map[ocr["image_path"]]
+
+            # 4. 使用已完成的 OCR 结果作为字幕
+            # RapidOCR 已经识别了全图文字，直接用 OCR 结果作为字幕
+            print("生成字幕列表...")
             subtitle_results = []
-            for screenshot in screenshots:
-                try:
-                    subtitle = detect_subtitles(screenshot["path"])
-                    if subtitle["text"]:
-                        subtitle_results.append({
-                            "time": screenshot["time"],
-                            "text": subtitle["text"],
-                            "confidence": subtitle["confidence"]
-                        })
-                except Exception as e:
-                    # 如果字幕检测失败，继续下一个
-                    pass
-            print(f"检测到 {len(subtitle_results)} 处字幕")
-            
-            # 5. 整合数据
+            for ocr in ocr_results:
+                text = ocr.get('text', '').strip()
+                if text and len(text) > 1:
+                    subtitle_results.append({
+                        "time": ocr.get('time', 0),
+                        "text": text,
+                        "confidence": ocr.get('confidence', 0),
+                        "method": "rapidocr"
+                    })
+            print(f"生成 {len(subtitle_results)} 条字幕")
+
+            # 5. 整理重复字幕
+            print("整理重复字幕...")
+            deduplicated_subtitles = self._deduplicate_subtitles(subtitle_results)
+            print(f"整理后剩余 {len(deduplicated_subtitles)} 条唯一字幕")
+
+            # 7. 使用整理后的字幕修正转录结果
+            print("使用字幕修正转录结果...")
+            from services.ai_service import correct_transcription_with_ocr
+            corrected_transcription = await correct_transcription_with_ocr(
+                transcription, ocr_results, deduplicated_subtitles
+            )
+            print(f"转录修正完成，{len(corrected_transcription)} 条记录")
+
+            # 8. 整合数据（使用整理后的唯一字幕）
             print("整合数据...")
             multimodal_data = self._integrate_data(
-                video_info, 
-                screenshots, 
-                ocr_results, 
-                subtitle_results, 
-                transcription
+                video_info,
+                screenshots,
+                ocr_results,
+                deduplicated_subtitles,  # 使用整理后的唯一字幕
+                corrected_transcription  # 使用修正后的转录
             )
-            
-            # 6. 生成分析结果
+
+            # 9. 生成分析结果
             print("生成分析结果...")
             analysis_result = await self._generate_analysis(multimodal_data, video_path)
-            
-            # 7. 保存分析结果
-            print("保存分析结果...")
-            result_path = self._save_analysis_result(video_path, analysis_result)
-            
-            # 构建结果
+
+            # 构建完整结果
             result = {
                 "status": "success",
                 "video_info": video_info,
                 "screenshot_count": len(screenshots),
                 "ocr_results": ocr_results,
-                "subtitle_results": subtitle_results,
+                "subtitle_results": deduplicated_subtitles,  # 使用整理后的唯一字幕
+                "raw_subtitle_count": len(subtitle_results),  # 原始字幕数量（含重复）
+                "corrected_transcription": corrected_transcription,  # 包含修正后的转录
                 "analysis": analysis_result,
-                "result_path": result_path
+                "result_path": None  # 暂时设为 None，等保存后再更新
             }
+
+            # 10. 保存完整分析结果
+            print("保存分析结果...")
+            result_path = self._save_analysis_result(video_path, result)
+            result["result_path"] = result_path
             
             # 更新缓存
             if len(self.cache) >= self.cache_max_size:
@@ -167,19 +199,30 @@ class MultimodalAnalysisService:
         
         # 添加转录数据
         for segment in transcription:
+            # 确保时间是浮点数
+            start_time = segment.get('start', 0)
+            end_time = segment.get('end', 0)
+            if isinstance(start_time, str):
+                start_time = float(start_time.replace('s', ''))
+            if isinstance(end_time, str):
+                end_time = float(end_time.replace('s', ''))
             time_series_data.append({
                 "type": "transcription",
-                "time": segment['start'],
-                "end_time": segment['end'],
+                "time": float(start_time),
+                "end_time": float(end_time),
                 "content": segment['text']
             })
         
         # 添加截图数据
         for i, screenshot in enumerate(screenshots):
             ocr_result = next((ocr for ocr in ocr_results if ocr["image_path"] == screenshot["path"]), None)
+            # 确保时间是浮点数
+            screenshot_time = screenshot.get('time', 0)
+            if isinstance(screenshot_time, str):
+                screenshot_time = float(screenshot_time.replace('s', ''))
             time_series_data.append({
                 "type": "screenshot",
-                "time": screenshot["time"],
+                "time": float(screenshot_time),
                 "content": {
                     "path": screenshot["path"],
                     "ocr_text": ocr_result["text"] if ocr_result else ""
@@ -188,12 +231,19 @@ class MultimodalAnalysisService:
         
         # 添加字幕数据
         for subtitle in subtitle_results:
+            # 确保 time 是浮点数
+            subtitle_time = subtitle.get('time', 0)
+            if isinstance(subtitle_time, str):
+                try:
+                    subtitle_time = float(subtitle_time.replace('s', ''))
+                except:
+                    subtitle_time = 0
             time_series_data.append({
                 "type": "subtitle",
-                "time": subtitle["time"],
+                "time": float(subtitle_time),
                 "content": subtitle["text"]
             })
-        
+
         # 按时间排序
         time_series_data.sort(key=lambda x: x["time"])
         
@@ -205,7 +255,43 @@ class MultimodalAnalysisService:
             "subtitle_results": subtitle_results,
             "transcription": transcription
         }
-    
+
+    def _deduplicate_subtitles(self, subtitle_results: List[Dict]) -> List[Dict]:
+        """
+        整理重复字幕，只保留唯一的字幕
+
+        Args:
+            subtitle_results: 字幕结果列表
+
+        Returns:
+            去重后的字幕列表
+        """
+        if not subtitle_results:
+            return []
+
+        # 按字幕内容分组，保留第一条（时间最早的）
+        seen_texts = {}
+        unique_subtitles = []
+
+        for subtitle in subtitle_results:
+            text = subtitle.get('text', '').strip()
+            if not text:
+                continue
+
+            # 使用文本前20个字符作为快速比较键
+            # 如果完全相同的文本已经存在，跳过
+            if text in seen_texts:
+                # 更新已有条目的结束时间
+                existing = seen_texts[text]
+                existing['end_time'] = subtitle.get('time', existing.get('time', 0))
+                continue
+
+            # 新的唯一字幕
+            seen_texts[text] = subtitle.copy()
+            unique_subtitles.append(subtitle)
+
+        return unique_subtitles
+
     async def _generate_analysis(self, multimodal_data: Dict, video_path: str) -> Dict:
         """
         生成多模态分析结果

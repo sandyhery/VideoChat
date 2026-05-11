@@ -154,6 +154,54 @@ const exportMindmap = async (mindmap) => {
   });
 };
 
+// 获取视频字幕轨道列表
+const getSubtitleTracks = async (videoPath) => {
+  const response = await request('/subtitle-tracks', {
+    method: 'GET',
+  });
+  return response.json();
+};
+
+// 获取视频字幕文件
+const getSubtitleFile = async (videoPath, trackIndex = 0, format = 'srt') => {
+  const url = `${API_BASE_URL}/subtitle-file?video_path=${encodeURIComponent(videoPath)}&track_index=${trackIndex}&format=${format}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `获取字幕文件失败: ${response.status}`);
+  }
+  return response;
+};
+
+// 从转录生成字幕文件
+const generateSubtitle = async (transcription, format = 'srt', filename = '') => {
+  const response = await request('/generate-subtitle', {
+    method: 'POST',
+    body: JSON.stringify({ transcription, format, filename }),
+  });
+  return response;
+};
+
+// 为转录文本添加标点符号和分段
+const punctuationTranscription = async (transcription) => {
+  const response = await request('/punctuation', {
+    method: 'POST',
+    body: JSON.stringify({ transcription }),
+  });
+  return response.json();
+};
+
+// 获取所有字幕来源
+const getSubtitleSources = async (videoPath, hasTranscription = false) => {
+  const url = `${API_BASE_URL}/subtitle-sources?video_path=${encodeURIComponent(videoPath)}&has_transcription=${hasTranscription}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `获取字幕来源失败: ${response.status}`);
+  }
+  return response.json();
+};
+
 const api = {
   uploadFile,
   getSummary,
@@ -166,6 +214,10 @@ const api = {
   exportTranscription,
   exportSummary,
   exportMindmap,
+  getSubtitleTracks,
+  getSubtitleFile,
+  generateSubtitle,
+  getSubtitleSources,
 };
 
 export default api;
