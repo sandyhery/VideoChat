@@ -1254,6 +1254,41 @@ function App() {
         }
     };
 
+    // 导出思维导图
+    const handleExportMindmap = async (mindmapData) => {
+        if (!mindmapData) {
+            message.warning('没有可导出的思维导图数据');
+            return;
+        }
+
+        try {
+            const response = await fetch('http://localhost:8100/api/export/mindmap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(mindmapData),
+            });
+
+            if (!response.ok) {
+                throw new Error('导出思维导图失败');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentFile.name.replace(/\.[^/.]+$/, '')}_mindmap.xmind`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            message.success('导出思维导图成功');
+        } catch (error) {
+            console.error('Export mindmap failed:', error);
+            message.error('导出思维导图失败：' + error.message);
+        }
+    };
+
     // 添加多模态分析函数
     const handleMultimodalAnalysis = async () => {
         if (!currentFile?.transcription || currentFile.transcription.length === 0) {
@@ -1966,6 +2001,14 @@ function App() {
                     >
                         {mindmapLoadingFiles.has(currentFile?.id) ? '生成中...' : '生成思维导图'}
                     </Button>
+                    {currentFile?.mindmapData && (
+                        <Button
+                            onClick={() => handleExportMindmap(currentFile.mindmapData)}
+                            icon={<DownloadOutlined />}
+                        >
+                            导出思维导图
+                        </Button>
+                    )}
                     {!currentFile ? (
                         <div className="empty-state">
                             <p>请在左侧选择要查看思维导图的文件</p>
