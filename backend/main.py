@@ -223,11 +223,15 @@ async def export_mindmap(mindmap: dict = Body(...)):
                 children_data = []
                 for child in children:
                     children_data.append(process_node(child))
-                return {
+                result = {
                     "id": node.get("id", "") or "",
                     "topic": topic,
                     "children": children_data
                 }
+                # 保留 direction 属性（用于左右分支定位）
+                if node.get("direction"):
+                    result["direction"] = node.get("direction")
+                return result
             root = mindmap_data.get("data", {})
             return process_node(root)
 
@@ -257,8 +261,14 @@ async def export_mindmap(mindmap: dict = Body(...)):
                     for child in children or []:
                         cid = child.get("id", "") or ("sub" + str(id(child)))
                         topic = child.get("topic", "")
-                        result += indent + '<topic id="' + str(cid) + '''">
-        <title>''' + str(topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("'", "&apos;") + '''</title>
+                        direction = child.get("direction", "")
+                        placement = ""
+                        if direction == "left":
+                            placement = ' placement="left"'
+                        elif direction == "right":
+                            placement = ' placement="right"'
+                        result += indent + '<topic id="' + str(cid) + '"' + placement + '>\n'
+                        result += indent + '  <title>' + str(topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("'", "&apos;") + '''</title>
 '''
                         if child.get("children"):
                             result += indent + '  <children>\n'
