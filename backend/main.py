@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import os
 import json
+import random
 import tempfile
 from datetime import datetime
 from services.stt_service import transcribe_audio, stop_transcription, is_file_being_transcribed
@@ -214,6 +215,7 @@ async def export_mindmap(mindmap: dict = Body(...)):
     """导出思维导图为 xmind 格式（XMind 8 标准）"""
     try:
         import zipfile
+        import time
 
         def convert_to_xmind_content(mindmap_data):
             """将 jsMind 格式转换为 xmind 格式"""
@@ -236,81 +238,74 @@ async def export_mindmap(mindmap: dict = Body(...)):
 
         xmind_content = convert_to_xmind_content(mindmap)
 
-        def build_topic_xml(node, indent=4):
-            """构建 XMind 8 格式的 topic XML"""
-            spaces = " " * indent
-            topic_id = node.get("id", "") or ""
-            topic_title = str(node.get("topic", "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;")
+        def gen_id():
+            return ''.join(random.choice('abcdefghijklmnopqrstuvwxyz0123456789') for _ in range(24))
 
-            xml = spaces + '<item type="dict">\n'
-            xml += spaces + '  <title type="str">' + topic_title + '</title>\n'
+        def build_topic_xml(node, indent=12):
+            spaces = " " * indent
+            tid = node.get("id", "") or gen_id()
+            title = str(node.get("topic", "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;")
+
+            xml = spaces + f'<topic id="{tid}" modified-by="" timestamp="{int(time.time()*1000)}">\n'
+            xml += spaces + f'  <title>{title}</title>\n'
 
             direction = node.get("direction", "")
             if direction:
-                xml += spaces + '  <placement type="str">' + direction + '</placement>\n'
+                xml += spaces + f'  <position svg:x="{"200" if direction == "right" else "-200"}" svg:y="0"/>\n'
 
             children = node.get("children", []) or []
             if children:
-                xml += spaces + '  <topics type="list">\n'
+                xml += spaces + '  <children>\n'
+                xml += spaces + '    <topics type="attached">\n'
                 for child in children:
-                    xml += build_topic_xml(child, indent + 4)
-                xml += spaces + '  </topics>\n'
+                    xml += build_topic_xml(child, indent + 6)
+                xml += spaces + '    </topics>\n'
+                xml += spaces + '  </children>\n'
 
-            xml += spaces + '</item>\n'
+            xml += spaces + '</topic>\n'
             return xml
 
         # 创建临时文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xmind") as temp_file:
             with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # content.xml（XMind 8 标准格式 - 修正版）
-                root_id = xmind_content.get("id", "root") or "root"
+                timestamp = int(time.time() * 1000)
+                root_id = xmind_content.get("id", "") or gen_id()
+
+                # meta.xml（XMind 8 必须）
+                meta_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="no"?><meta xmlns="urn:xmind:xmap:xmlns:meta:2.0" version="2.0"><Author><Name>VideoChat AI</Name><Email/><Org/></Author><Create><Time>{time.strftime("%b %d, %Y %I:%M:%S %p")}</Time></Create><Creator><Name>XMind</Name><Version>R3.7.7.201801311814</Version></Creator></meta>'''
+                zip_file.writestr('meta.xml', meta_xml.encode('utf-8'))
+
+                # content.xml（XMind 8 标准格式）
+                content_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="no"?><xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0" xmlns:fo="http://www.w3.org/1999/XSL/Format" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:xlink="http://www.w3.org/1999/xlink" modified-by="" timestamp="{timestamp}" version="2.0"><sheet id="{gen_id()}" modified-by="" theme="default" timestamp="{timestamp}"><topic id="{root_id}" modified-by="" structure-class="org.xmind.ui.map.unbalanced" timestamp="{timestamp}">'''
+
                 root_topic = xmind_content.get("topic", "思维导图") or "思维导图"
+                content_xml += f'<title>{str(root_topic).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;")}</title>\n'
 
-                xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
-<root>
-  <item type="dict">
-    <structure type="str">org.xmind.ui.map.unbalanced</structure>
-    <title type="str">Sheet 1</title>
-    <topic type="dict">
-      <title type="str">''' + str(root_topic).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;") + '''</title>
-      <topics type="list">
-'''
+                children = xmind_content.get("children", []) or []
+                if children:
+                    content_xml += '  <children>\n'
+                    content_xml += '    <topics type="attached">\n'
+                    for child in children:
+                        content_xml += build_topic_xml(child)
+                    content_xml += '    </topics>\n'
+                    content_xml += '  </children>\n'
 
-                for child in xmind_content.get("children", []):
-                    xml_content += build_topic_xml(child, 6)
+                content_xml += f'''</topic><title>Sheet 1</title></sheet></xmap-content>'''
+                zip_file.writestr('content.xml', content_xml.encode('utf-8'))
 
-                xml_content += '''      </topics>
-    </topic>
-  </item>
-</root>'''
-
-                zip_file.writestr('content.xml', xml_content.encode('utf-8'))
+                # styles.xml（XMind 8 必须，空文件）
+                styles_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="no"?><xmap-styles xmlns="urn:xmind:xmap:xmlns:styles:2.0" modified-by="" timestamp="1528440630589" version="2.0"><styles/><topic-style id="DEFAULT" type="topic"/><topic-style id="attached" type="topic"/></xmap-styles>'''
+                zip_file.writestr('styles.xml', styles_xml.encode('utf-8'))
 
                 # META-INF/manifest.xml（XMind 8 标准）
-                manifest_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="urn:xmind:xmap:xmlns:manifest:1.0">
-  <file-entry full-path="content.xml" media-type="text/xml"/>
-  <file-entry full-path="META-INF/metadata.xml" media-type="text/xml"/>
-  <file-entry full-path="META-INF/manifest.xml" media-type="text/xml"/>
-</manifest>'''
+                manifest_xml = '''<?xml version="1.0" encoding="UTF-8"?><manifest xmlns="urn:xmind:xmap:xmlns:manifest:1.0" password-hash=""><file-entry full-path="content.xml" media-type="text/xml"/><file-entry full-path="meta.xml" media-type="text/xml"/><file-entry full-path="styles.xml" media-type="text/xml"/><file-entry full-path="META-INF/manifest.xml" media-type="text/xml"/></manifest>'''
                 zip_file.writestr('META-INF/manifest.xml', manifest_xml.encode('utf-8'))
-
-                # META-INF/metadata.xml
-                metadata_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<xmeta xmlns="urn:xmind:xhtml:1.0">
-  <creator>
-    <name>VideoChat AI</name>
-    <version>1.0</version>
-  </creator>
-  <timestamp>{}</timestamp>
-</xmeta>'''.format(datetime.now().isoformat())
-                zip_file.writestr('META-INF/metadata.xml', metadata_xml.encode('utf-8'))
 
             temp_file.flush()
 
             # 生成文件名
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"mindmap_{timestamp}.xmind"
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"mindmap_{timestamp_str}.xmind"
 
             return FileResponse(
                 path=temp_file.name,
