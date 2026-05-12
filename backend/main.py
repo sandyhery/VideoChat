@@ -211,47 +211,81 @@ async def export_summary(summary: str = Body(...)):
 
 @app.post("/api/export/mindmap")
 async def export_mindmap(mindmap: dict = Body(...)):
-    """导出思维导图为 xmind 格式"""
+    """导出思维导图为 xmind 格式（XMind 8 标准）"""
     try:
         import zipfile
 
-        # 将 mindmap 数据转换为 xmind 格式
-        # xmind 是 zip 格式，包含 content.json 文件
-
         def convert_to_xmind_content(mindmap_data):
             """将 jsMind 格式转换为 xmind 格式"""
-            def process_node(node, parent_id=None):
+            def process_node(node):
                 topic = node.get("text", node.get("topic", ""))
                 children = node.get("children", []) or []
                 children_data = []
                 for child in children:
-                    children_data.append(process_node(child, node.get("id", "")))
-
+                    children_data.append(process_node(child))
                 return {
-                    "id": node.get("id", ""),
+                    "id": node.get("id", "") or "",
                     "topic": topic,
                     "children": children_data
                 }
-
             root = mindmap_data.get("data", {})
-            return {
-                "root": process_node(root),
-                "metadata": mindmap_data.get("meta", {})
-            }
+            return process_node(root)
 
         xmind_content = convert_to_xmind_content(mindmap)
 
         # 创建临时文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xmind") as temp_file:
             with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # XMind 8 标准格式：META-INF/ 目录结构
-                content_json = {
-                    "id": xmind_content["root"].get("id", "root") or "root",
-                    "title": xmind_content["metadata"].get("name", "思维导图") or "思维导图",
-                    "children": xmind_content["root"].get("children", [])
-                }
-                zip_file.writestr('META-INF/content.json', json.dumps(content_json, ensure_ascii=False, indent=2))
+                # content.xml（XMind 8 标准格式，根目录）
+                root_id = xmind_content.get("id", "root") or "root"
+                root_topic = xmind_content.get("topic", "思维导图") or "思维导图"
 
+                xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0"
+  xmlns:fo="urn:xmind:xmap:xmlns:xsl:fo:1.0"
+  xmlns:svg="urn:xmind:xmap:xmlns:xsl:svg:1.0"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml"
+  xmlns:xlink="http://www.w3.org/1999/xlink">
+  <sheet id="sheet1" theme="default">
+    <title>思维导图</title>
+    <topic id="''' + root_id + '''" structure="map">
+      <title>''' + str(root_topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("'", "&apos;") + '''</title>
+'''
+
+                def add_children(children, indent="      "):
+                    result = ""
+                    for child in children or []:
+                        cid = child.get("id", "") or ("sub" + str(id(child)))
+                        topic = child.get("topic", "")
+                        result += indent + '<topic id="' + str(cid) + '''">
+        <title>''' + str(topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("'", "&apos;") + '''</title>
+'''
+                        if child.get("children"):
+                            result += indent + '  <children>\n'
+                            result += indent + '    <topics type="attached">\n'
+                            result += add_children(child.get("children"), indent + "        ")
+                            result += indent + '    </topics>\n'
+                            result += indent + '  </children>\n'
+                        result += indent + '</topic>\n'
+                    return result
+
+                xml_content += add_children(xmind_content.get("children", []))
+                xml_content += '''    </topic>
+  </sheet>
+</xmap-content>'''
+
+                zip_file.writestr('content.xml', xml_content.encode('utf-8'))
+
+                # META-INF/manifest.xml（XMind 8 标准）
+                manifest_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="urn:xmind:xmap:xmlns:manifest:1.0">
+  <file-entry full-path="content.xml" media-type="text/xml"/>
+  <file-entry full-path="META-INF/metadata.xml" media-type="text/xml"/>
+  <file-entry full-path="META-INF/manifest.xml" media-type="text/xml"/>
+</manifest>'''
+                zip_file.writestr('META-INF/manifest.xml', manifest_xml.encode('utf-8'))
+
+                # META-INF/metadata.xml
                 metadata_xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <xmeta xmlns="urn:xmind:xhtml:1.0">
   <creator>
@@ -260,48 +294,7 @@ async def export_mindmap(mindmap: dict = Body(...)):
   </creator>
   <timestamp>{}</timestamp>
 </xmeta>'''.format(datetime.now().isoformat())
-                zip_file.writestr('META-INF/metadata.xml', metadata_xml)
-
-                # 添加 MANIFEST.MF（XMind 8 必须）
-                manifest = '''Manifest-Version: 1.0
-Created-By: XMind 8.x
-'''
-                zip_file.writestr('META-INF/MANIFEST.MF', manifest)
-
-                # xmap.xml 内容（保持兼容）
-                xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
-<xmap-content xmlns:xmap="urn:xmind:xmap:xmlns:content:2.0"
-  xmlns:xhtml="http://www.w3.org/1999/xhtml"
-  xmlns="urn:xmind:xmap:xmlns:content:2.0">
-  <sheet>
-    <title>思维导图</title>
-    <topic id="''' + (xmind_content["root"].get("id", "root") or "root") + '''" structure="map">
-      <title>''' + (xmind_content["root"].get("topic") or "思维导图") + '''</title>
-'''
-
-                def add_children(children, indent="      "):
-                    result = ""
-                    for child in children or []:
-                        tid = child.get("id", "sub" + str(id(child)))
-                        topic = child.get("topic", child.get("text", ""))
-                        result += indent + '<topic id="' + str(tid) + '">\n'
-                        result += indent + '  <title>' + str(topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;") + '</title>\n'
-                        if child.get("children"):
-                            result += indent + '  <children>\n'
-                            result += indent + '    <topics type="attached">\n'
-                            result += add_children(child.get("children"), indent + "      ")
-                            result += indent + '    </topics>\n'
-                            result += indent + '  </children>\n'
-                        result += indent + '</topic>\n'
-                    return result
-
-                xml_content += add_children(xmind_content["root"].get("children", []))
-
-                xml_content += '''    </topic>
-  </sheet>
-</xmap-content>'''
-
-                zip_file.writestr('xmap.xml', xml_content)
+                zip_file.writestr('META-INF/metadata.xml', metadata_xml.encode('utf-8'))
 
             temp_file.flush()
 
