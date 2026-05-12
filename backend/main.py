@@ -244,14 +244,25 @@ async def export_mindmap(mindmap: dict = Body(...)):
         # 创建临时文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xmind") as temp_file:
             with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # XMind 标准格式的 content.json
+                # XMind 8 标准格式：META-INF/ 目录结构
                 content_json = {
-                    "id": xmind_content["root"].get("id", "root"),
-                    "title": xmind_content["metadata"].get("name", "思维导图"),
+                    "id": xmind_content["root"].get("id", "root") or "root",
+                    "title": xmind_content["metadata"].get("name", "思维导图") or "思维导图",
                     "children": xmind_content["root"].get("children", [])
                 }
+                zip_file.writestr('META-INF/content.json', json.dumps(content_json, ensure_ascii=False, indent=2))
 
-                # 使用标准 XMind XML 格式
+                metadata_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<xmeta xmlns="urn:xmind:xhtml:1.0">
+  <creator>
+    <name>VideoChat AI</name>
+    <version>1.0</version>
+  </creator>
+  <timestamp>{}</timestamp>
+</xmeta>'''.format(datetime.now().isoformat())
+                zip_file.writestr('META-INF/metadata.xml', metadata_xml)
+
+                # xmap.xml 内容（保持兼容）
                 xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
 <xmap-content xmlns:xmap="urn:xmind:xmap:xmlns:content:2.0"
   xmlns:xhtml="http://www.w3.org/1999/xhtml"
@@ -285,17 +296,6 @@ async def export_mindmap(mindmap: dict = Body(...)):
 </xmap-content>'''
 
                 zip_file.writestr('xmap.xml', xml_content)
-
-                # 添加 metadata.xml
-                metadata_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<xmeta xmlns="urn:xmind:xhtml:1.0">
-  <creator>
-    <name>VideoChat AI</name>
-    <version>1.0</version>
-  </creator>
-  <timestamp>{}</timestamp>
-</xmeta>'''.format(datetime.now().isoformat())
-                zip_file.writestr('metadata.xml', metadata_xml)
 
             temp_file.flush()
 
