@@ -262,6 +262,12 @@ async def export_mindmap(mindmap: dict = Body(...)):
 </xmeta>'''.format(datetime.now().isoformat())
                 zip_file.writestr('META-INF/metadata.xml', metadata_xml)
 
+                # 添加 MANIFEST.MF（XMind 8 必须）
+                manifest = '''Manifest-Version: 1.0
+Created-By: XMind 8.x
+'''
+                zip_file.writestr('META-INF/MANIFEST.MF', manifest)
+
                 # xmap.xml 内容（保持兼容）
                 xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
 <xmap-content xmlns:xmap="urn:xmind:xmap:xmlns:content:2.0"
