@@ -228,7 +228,6 @@ async def export_mindmap(mindmap: dict = Body(...)):
                     "topic": topic,
                     "children": children_data
                 }
-                # 保留 direction 属性（用于左右分支定位）
                 if node.get("direction"):
                     result["direction"] = node.get("direction")
                 return result
@@ -237,52 +236,53 @@ async def export_mindmap(mindmap: dict = Body(...)):
 
         xmind_content = convert_to_xmind_content(mindmap)
 
+        def build_topic_xml(node, indent=4):
+            """构建 XMind 8 格式的 topic XML"""
+            spaces = " " * indent
+            topic_id = node.get("id", "") or ""
+            topic_title = str(node.get("topic", "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;")
+
+            xml = spaces + '<item type="dict">\n'
+            xml += spaces + '  <title type="str">' + topic_title + '</title>\n'
+
+            direction = node.get("direction", "")
+            if direction:
+                xml += spaces + '  <placement type="str">' + direction + '</placement>\n'
+
+            children = node.get("children", []) or []
+            if children:
+                xml += spaces + '  <topics type="list">\n'
+                for child in children:
+                    xml += build_topic_xml(child, indent + 4)
+                xml += spaces + '  </topics>\n'
+
+            xml += spaces + '</item>\n'
+            return xml
+
         # 创建临时文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xmind") as temp_file:
             with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # content.xml（XMind 8 标准格式，根目录）
+                # content.xml（XMind 8 标准格式 - 修正版）
                 root_id = xmind_content.get("id", "root") or "root"
                 root_topic = xmind_content.get("topic", "思维导图") or "思维导图"
 
                 xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
-<xmap-content xmlns="urn:xmind:xmap:xmlns:content:2.0"
-  xmlns:fo="urn:xmind:xmap:xmlns:xsl:fo:1.0"
-  xmlns:svg="urn:xmind:xmap:xmlns:xsl:svg:1.0"
-  xmlns:xhtml="http://www.w3.org/1999/xhtml"
-  xmlns:xlink="http://www.w3.org/1999/xlink">
-  <sheet id="sheet1" theme="default">
-    <title>思维导图</title>
-    <topic id="''' + root_id + '''" structure="map">
-      <title>''' + str(root_topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("'", "&apos;") + '''</title>
+<root>
+  <item type="dict">
+    <structure type="str">org.xmind.ui.map.unbalanced</structure>
+    <title type="str">Sheet 1</title>
+    <topic type="dict">
+      <title type="str">''' + str(root_topic).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&apos;") + '''</title>
+      <topics type="list">
 '''
 
-                def add_children(children, indent="      "):
-                    result = ""
-                    for child in children or []:
-                        cid = child.get("id", "") or ("sub" + str(id(child)))
-                        topic = child.get("topic", "")
-                        direction = child.get("direction", "")
-                        placement = ""
-                        if direction == "left":
-                            placement = ' placement="left"'
-                        elif direction == "right":
-                            placement = ' placement="right"'
-                        result += indent + '<topic id="' + str(cid) + '"' + placement + '>\n'
-                        result += indent + '  <title>' + str(topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;").replace("'", "&apos;") + '''</title>
-'''
-                        if child.get("children"):
-                            result += indent + '  <children>\n'
-                            result += indent + '    <topics type="attached">\n'
-                            result += add_children(child.get("children"), indent + "        ")
-                            result += indent + '    </topics>\n'
-                            result += indent + '  </children>\n'
-                        result += indent + '</topic>\n'
-                    return result
+                for child in xmind_content.get("children", []):
+                    xml_content += build_topic_xml(child, 6)
 
-                xml_content += add_children(xmind_content.get("children", []))
-                xml_content += '''    </topic>
-  </sheet>
-</xmap-content>'''
+                xml_content += '''      </topics>
+    </topic>
+  </item>
+</root>'''
 
                 zip_file.writestr('content.xml', xml_content.encode('utf-8'))
 
