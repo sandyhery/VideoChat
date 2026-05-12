@@ -1262,14 +1262,18 @@ function App() {
         }
 
         try {
-            const response = await fetch('http://localhost:8100/api/export/mindmap', {
+            // mindmapData 是 JSON 字符串，需要先解析为对象
+            const parsedMindmap = typeof mindmapData === 'string' ? JSON.parse(mindmapData) : mindmapData;
+
+            // 调用 API 导出 XMind 格式
+            const response = await fetch('http://127.0.0.1:8100/api/export/mindmap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(mindmapData),
+                body: JSON.stringify(parsedMindmap)
             });
 
             if (!response.ok) {
-                throw new Error('导出思维导图失败');
+                throw new Error('导出失败');
             }
 
             const blob = await response.blob();
