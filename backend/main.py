@@ -221,16 +221,17 @@ async def export_mindmap(mindmap: dict = Body(...)):
         def convert_to_xmind_content(mindmap_data):
             """将 jsMind 格式转换为 xmind 格式"""
             def process_node(node, parent_id=None):
-                result = {
-                    "id": node.get("id", ""),
-                    "text": node.get("text", node.get("topic", "")),
-                    "children": []
-                }
-                children = node.get("children", [])
+                topic = node.get("text", node.get("topic", ""))
+                children = node.get("children", []) or []
+                children_data = []
                 for child in children:
-                    child_obj = process_node(child, result["id"])
-                    result["children"].append(child_obj)
-                return result
+                    children_data.append(process_node(child, node.get("id", "")))
+
+                return {
+                    "id": node.get("id", ""),
+                    "topic": topic,
+                    "children": children_data
+                }
 
             root = mindmap_data.get("data", {})
             return {
@@ -243,17 +244,57 @@ async def export_mindmap(mindmap: dict = Body(...)):
         # 创建临时文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xmind") as temp_file:
             with zipfile.ZipFile(temp_file.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # 添加 content.json
-                zip_file.writestr('content.json', json.dumps(xmind_content, ensure_ascii=False, indent=2))
+                # XMind 标准格式的 content.json
+                content_json = {
+                    "id": xmind_content["root"].get("id", "root"),
+                    "title": xmind_content["metadata"].get("name", "思维导图"),
+                    "children": xmind_content["root"].get("children", [])
+                }
+
+                # 使用标准 XMind XML 格式
+                xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<xmap-content xmlns:xmap="urn:xmind:xmap:xmlns:content:2.0"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml"
+  xmlns="urn:xmind:xmap:xmlns:content:2.0">
+  <sheet>
+    <title>思维导图</title>
+    <topic id="''' + (xmind_content["root"].get("id", "root") or "root") + '''" structure="map">
+      <title>''' + (xmind_content["root"].get("topic") or "思维导图") + '''</title>
+'''
+
+                def add_children(children, indent="      "):
+                    result = ""
+                    for child in children or []:
+                        tid = child.get("id", "sub" + str(id(child)))
+                        topic = child.get("topic", child.get("text", ""))
+                        result += indent + '<topic id="' + str(tid) + '">\n'
+                        result += indent + '  <title>' + str(topic).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;") + '</title>\n'
+                        if child.get("children"):
+                            result += indent + '  <children>\n'
+                            result += indent + '    <topics type="attached">\n'
+                            result += add_children(child.get("children"), indent + "      ")
+                            result += indent + '    </topics>\n'
+                            result += indent + '  </children>\n'
+                        result += indent + '</topic>\n'
+                    return result
+
+                xml_content += add_children(xmind_content["root"].get("children", []))
+
+                xml_content += '''    </topic>
+  </sheet>
+</xmap-content>'''
+
+                zip_file.writestr('xmap.xml', xml_content)
+
                 # 添加 metadata.xml
-                metadata_xml = """<?xml version="1.0" encoding="UTF-8"?>
+                metadata_xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <xmeta xmlns="urn:xmind:xhtml:1.0">
   <creator>
     <name>VideoChat AI</name>
     <version>1.0</version>
   </creator>
   <timestamp>{}</timestamp>
-</xmeta>""".format(datetime.now().isoformat())
+</xmeta>'''.format(datetime.now().isoformat())
                 zip_file.writestr('metadata.xml', metadata_xml)
 
             temp_file.flush()

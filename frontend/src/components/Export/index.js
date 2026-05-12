@@ -96,9 +96,14 @@ const Export = ({ selectedFiles, currentFile, uploadedFiles }) => {
     }
 
     try {
+      // 解析 mindmapData（可能是 JSON 字符串）
+      const parsedMindmap = typeof currentFile.mindmapData === 'string'
+        ? JSON.parse(currentFile.mindmapData)
+        : currentFile.mindmapData;
+
       if (format === 'xmind') {
         // 导出为 xmind 格式
-        const response = await api.exportMindmap(currentFile.mindmapData);
+        const response = await api.exportMindmap(parsedMindmap);
         const contentDisposition = response.headers.get('content-disposition');
         let filename = `${currentFile.name.replace(/\.[^/.]+$/, '')}_mindmap.xmind`;
         if (contentDisposition) {
@@ -119,7 +124,7 @@ const Export = ({ selectedFiles, currentFile, uploadedFiles }) => {
         message.success('导出思维导图(xmind)成功');
       } else {
         // 导出为 json 格式
-        const response = await api.exportMindmap(currentFile.mindmapData);
+        const response = await api.exportMindmap(parsedMindmap);
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
