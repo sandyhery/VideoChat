@@ -396,14 +396,14 @@ def transcribe_with_funasr(file_path: str, filename: str = ""):
         if hotwords_file and os.path.exists(hotwords_file):
             model_kwargs["hotword_file"] = hotwords_file
             print(f"📝 使用热词文件: {hotwords_file}")
-        elif filename:
-            # 从文件名提取关键词作为内置热词
+
+        # 从文件名提取关键词作为内置热词
+        filename_hotwords = ""
+        if filename:
             file_info = extract_keywords_from_filename(filename)
             if file_info["all_terms"]:
-                # 将关键词通过 hotword 参数传给 FunASR
-                hotwords_str = ",".join(file_info["all_terms"][:10])
-                generate_kwargs["hotword"] = hotwords_str
-                print(f"📝 使用文件主题关键词: {file_info['all_terms'][:5]} -> 热词: {hotwords_str}")
+                filename_hotwords = ",".join(file_info["all_terms"][:10])
+                print(f"📝 使用文件主题关键词: {file_info['all_terms'][:5]} -> 热词: {filename_hotwords}")
 
         model = AutoModel(**model_kwargs)
 
@@ -414,6 +414,10 @@ def transcribe_with_funasr(file_path: str, filename: str = ""):
             "merge_vad": True,  # 合并 VAD 分段，提高连续性
             "merge_length_s": 15,  # 合并段落长度（秒），适合长音频
         }
+
+        # 添加文件名关键词热词
+        if filename_hotwords:
+            generate_kwargs["hotword"] = filename_hotwords
 
         # 启用逆文本正则化（阿拉伯数字/日期等转换为中文）
         if enable_itn:
