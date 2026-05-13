@@ -37,6 +37,58 @@ def extract_keywords_from_filename(filename: str) -> dict:
     }
 
 
+def detect_dialect_from_filename(filename: str) -> str:
+    """
+    从文件名中自动检测方言类型
+    根据文件名关键词匹配方言特征词
+    """
+    if not filename:
+        return "auto"
+
+    file_info = extract_keywords_from_filename(filename)
+    keywords = file_info["all_terms"]
+
+    dialect_indicators = {
+        "cantonese": ["粤语", "香港", "广东", "广州", "粤方言", "白话"],
+        "sichuan": ["四川", "成都", "川普", "川话", "四川话"],
+        "shanghai": ["上海", "沪语", "浦东", "上海话", "沪"],
+        "taiwan": ["台湾", "闽南", "台语", "Taiwan", "台海"],
+        "hongkong": ["香港", "港语", "港话", "HK"],
+        "nanjing": ["南京", "江浙", "江苏", "金陵"],
+        "shandong": ["山东", "济南", "齐鲁"],
+        "henan": ["河南", "中原", "郑州"],
+        "dongbei": ["东北", "辽宁", "吉林", "黑龙江"],
+    }
+
+    for dialect, indicators in dialect_indicators.items():
+        if any(kw in keywords for kw in indicators):
+            print(f"🔍 检测到方言特征: {dialect} (关键词: {[kw for kw in indicators if kw in keywords]})")
+            return dialect
+
+    return "auto"
+
+
+def get_dialect_prompt(dialect: str) -> str:
+    """
+    根据方言类型返回对应的提示词
+    """
+    dialect_prompts = {
+        "auto": "这是一段中文语音，可能包含多种方言口音特征。请结合上下文准确识别。",
+        "mandarin": "这是一段中文普通话语音，标准中文发音，识别难度较低。",
+        "cantonese": "这是一段粤语语音，注意粤方言特征：入声丰富、倒装句多、常用单字词。如"我食先"表示"我先吃"。同音词注意：时/是、死/洗、行/形等。",
+        "sichuan": "这是一段四川话语音，注意川音特征：n/l不分、in/ing不分、ang/an不分。如"牛奶"可能读成"流来"。常用"哈"、"嘛"等语气词。",
+        "shanghai": "这是一段上海话语音，注意沪语特征：入声短促、浊音多。如"朋友"可能读成"朋迂"。常用"阿拉"、"侬"等代词。",
+        "taiwan": "这是一段台湾国语语音，注意台音特征：轻声多、儿化音特殊。如"这样子"常说成"酱子"。部分词汇受闽南语影响。",
+        "hongkong": "这是一段香港普通话语音，注意港音特征：声调偏平、英文词汇多。如"ok"常直接使用。",
+        "nanjing": "这是一段南京话语音，注意江浙特征：平翘舌混淆、in/ing不分。如"人民"可能读成"人明"。",
+        "shandong": "这是一段山东话语音，注意鲁音特征：翘舌音多、ang/an混淆。如"吃饭"可能读成"吃翻"。",
+        "henan": "这是一段河南话语音，注意中原特征：去声多、声调偏高。如"什么"常说成"啥"。",
+        "dongbei": "这是一段东北话语音，注意东北特征：儿化音多、声调夸张。常用"嘎"、"咋"等语气词。",
+    }
+
+    return dialect_prompts.get(dialect, dialect_prompts["auto"])
+
+
 def calibrate_transcription_with_filename(transcription: list, filename: str) -> list:
     """
     基于文件名校准转录结果
@@ -203,16 +255,19 @@ def transcribe_with_faster_whisper(file_path: str, model_size: str = None, filen
             }
 
         # 使用 initial_prompt 帮助识别方言/口音
-        # 这个提示词包含常见方言特征，帮助模型更好识别
-        dialect_prompt = STT_CONFIG.get("dialect_prompt", "")
-        if dialect_prompt:
-            # 如果有文件名，将其加入到提示词中
-            if filename:
-                file_info = extract_keywords_from_filename(filename)
-                context_hint = f"视频主题关键词：{', '.join(file_info['all_terms'][:5])}"
-                transcribe_kwargs["initial_prompt"] = f"{dialect_prompt}\n{context_hint}"
-            else:
-                transcribe_kwargs["initial_prompt"] = dialect_prompt
+        # 自动从文件名检测方言，然后获取对应的方言提示词
+        detected_dialect = detect_dialect_from_filename(filename) if filename else "auto"
+        dialect_prompt = get_dialect_prompt(detected_dialect)
+
+        if filename:
+            file_info = extract_keywords_from_filename(filename)
+            context_hint = f"视频主题关键词：{', '.join(file_info['all_terms'][:5])}"
+            transcribe_kwargs["initial_prompt"] = f"{dialect_prompt}\n{context_hint}"
+        else:
+            transcribe_kwargs["initial_prompt"] = dialect_prompt
+
+        if detected_dialect != "auto":
+            print(f"🔍 检测到方言: {detected_dialect}, 使用提示词: {dialect_prompt[:50]}...")
 
         print(f"🚀 使用 Faster-Whisper 进行转录（beam_size={transcribe_kwargs['beam_size']}, vad={vad_filter}）...")
 
@@ -253,7 +308,7 @@ def transcribe_with_faster_whisper(file_path: str, model_size: str = None, filen
             })
         return transcription
 
-def transcribe_with_openai(file_path: str):
+def transcribe_with_openai(file_path: str, filename: str = ""):
     """使用 OpenAI Whisper API 进行转录（质量最高）"""
     try:
         from openai import OpenAI
@@ -261,15 +316,35 @@ def transcribe_with_openai(file_path: str):
             api_key=STT_CONFIG.get("openai_api_key", ""),
             base_url=STT_CONFIG.get("openai_base_url", "https://api.openai.com/v1")
         )
-        
+
         print(f"🚀 使用 OpenAI Whisper API 进行转录...")
-        
+
+        # 构建 prompt 参数（方言+文件名提示）
+        prompt = None
+        detected_dialect = detect_dialect_from_filename(filename) if filename else "auto"
+        dialect_prompt = get_dialect_prompt(detected_dialect)
+
+        if filename:
+            file_info = extract_keywords_from_filename(filename)
+            keywords = file_info["all_terms"]
+            context_hint = f"视频主题关键词：{', '.join(keywords[:5])}" if keywords else ""
+            if context_hint:
+                prompt = f"{dialect_prompt}\n{context_hint}"
+            else:
+                prompt = dialect_prompt
+        elif detected_dialect != "auto":
+            prompt = dialect_prompt
+
+        if prompt:
+            print(f"📝 使用提示词: {prompt[:80]}...")
+
         with open(file_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
                 language=STT_CONFIG.get("language", "zh"),
-                response_format="verbose_json"
+                response_format="verbose_json",
+                prompt=prompt if prompt else None
             )
         
         # 转换为标准格式
@@ -325,7 +400,10 @@ def transcribe_with_funasr(file_path: str, filename: str = ""):
             # 从文件名提取关键词作为内置热词
             file_info = extract_keywords_from_filename(filename)
             if file_info["all_terms"]:
-                print(f"📝 使用文件主题关键词: {file_info['all_terms'][:5]}")
+                # 将关键词通过 hotword 参数传给 FunASR
+                hotwords_str = ",".join(file_info["all_terms"][:10])
+                generate_kwargs["hotword"] = hotwords_str
+                print(f"📝 使用文件主题关键词: {file_info['all_terms'][:5]} -> 热词: {hotwords_str}")
 
         model = AutoModel(**model_kwargs)
 
@@ -406,7 +484,7 @@ async def transcribe_audio(file_path: str, model_size: str = None, filename: str
 
         # 根据引擎选择不同的转录方法
         if engine == "openai":
-            transcription = await asyncio.to_thread(transcribe_with_openai, file_path)
+            transcription = await asyncio.to_thread(transcribe_with_openai, file_path, filename)
         elif engine == "funasr":
             transcription = await asyncio.to_thread(transcribe_with_funasr, file_path, filename)
         else:  # 默认使用 faster_whisper

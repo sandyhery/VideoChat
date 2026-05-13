@@ -43,7 +43,9 @@ async def add_punctuation_and_segmentation(text: str, _from_long: bool = False) 
 4. 对于长段落，可以根据语义分成2-3段
 5. 输出格式：直接输出处理后的文本，不要添加任何解释
 
-注意：这是一段语音转录的文字，可能存在一些口语化表达，请在保持原意的前提下进行规范化处理。"""
+注意：这是一段语音转录的文字，可能存在一些口语化表达，请在保持原意的前提下进行规范化处理。
+
+古文字处理：如果内容涉及古文字（特别是用双引号""标注的单字或词语，如"手"、"又"、"巾"等），或是提到"篆"相关的字（如篆书、小篆等），或是黑板上写的古文字，请单独标记这些字，用[seal]标签包裹，如：[seal]手[/seal]、[seal]篆[/seal]。注意：只标记单个字或词语，不要标记整句话。"""
 
     data = {
         "model": AI_CONFIG["model"],
@@ -227,13 +229,13 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
     print(f"[generate_mindmap] 开始生成思维导图，输入文本长度: {len(text)}")
     try:
         # 从文件名中提取有意义的信息
-        import re
         root_topic = "主题"
+        keywords = []
         if filename:
-            clean_filename = re.sub(r'\.\w+$', '', filename)
-            clean_filename = re.sub(r'^\d+[_\-]', '', clean_filename)
-            root_topic = clean_filename
-        
+            file_info = extract_filename_info(filename)
+            root_topic = file_info["clean_name"]
+            keywords = file_info["all_terms"][:5]
+
         example = {
             "meta": {"name": "思维导图", "author": "AI", "version": "0.2"},
             "format": "node_tree",
@@ -252,13 +254,29 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
             "Authorization": f"Bearer {AI_CONFIG['api_key']}",
             "Content-Type": "application/json"
         }
-        
+
+        # 根据文件名获取方言提示
+        dialect_hint = ""
+        if filename:
+            from services.stt_service import detect_dialect_from_filename, get_dialect_prompt
+            dialect = detect_dialect_from_filename(filename)
+            if dialect != "auto":
+                dialect_hint = f"\n注意：音频包含{dialect}口音特征，识别时注意对应方言特征。"
+                dialect_prompt = get_dialect_prompt(dialect)
+                dialect_hint = f"\n{dialect_prompt}"
+
+        keywords_str = ", ".join(keywords) if keywords else "未知主题"
+
         system_prompt = f"""你是一个专业的思维导图生成专家。请将视频内容转换为结构化的思维导图 JSON。
+
+【视频文件名】: {root_topic}
+【主题关键词】: {keywords_str}
+{dialect_hint}
 
 ## 核心要求：
 1. 严格按示例格式生成 JSON
 2. 包含 meta、format、data 三个顶级字段
-3. data 必须包含 id、text、children 字段
+3. data 必须包含 id、topic、children 字段（jsMind 使用 topic 不是 text）
 4. 第一层子节点必须指定 direction（left/right），左右交替
 5. 所有节点的 id 必须唯一
 6. 只返回 JSON，不要任何额外说明
@@ -269,21 +287,22 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
 - 子节点要提炼核心主题和关键要点
 - 思维导图层级控制在3-4层
 - 子节点数量适中，每个节点内容简洁
+- 主题关键词 {keywords_str} 包含视频的核心概念，请确保相关内容被正确提取
 
 ## 古文字处理：
 - 如果内容涉及古文字（特别是用双引号""标注的单字或词语，如"手"、"又"、"巾"等），或是提到"篆"相关的字（如篆书、小篆等），或是黑板上写的古文字，请单独标记这些字，用[seal]标签包裹，如：[seal]手[/seal]、[seal]篆[/seal]
 - 注意：只标记单个字或词语，不要标记整句话
 
 ## jsMind 格式说明：
-- 根节点 id 为 "root"，text 为根主题
-- 每个节点必须有 id、text、children 字段
+- 根节点 id 为 "root"，topic 为根主题（不是 text）
+- 每个节点必须有 id、topic、children 字段
 - 第一层子节点需要 direction 字段（left 或 right）
 
 ## 示例结构：
 {json.dumps(example, ensure_ascii=False, indent=2)}
 
 请严格按照上述格式生成有效的思维导图 JSON。"""
-        
+
         data = {
             "model": AI_CONFIG["model"],
             "messages": [
@@ -291,8 +310,8 @@ async def generate_mindmap(text: str, filename: str = "") -> str:
                 {"role": "user", "content": text}
             ],
             "stream": False,
-            "temperature": 0.6,
-            "max_tokens": 4000  # 增加 token 限制以支持更复杂的思维导图
+            "temperature": 0.3,  # 降低温度提高 JSON 一致性
+            "max_tokens": 4000
         }
 
         print(f"[generate_mindmap] 发送请求到 {url}")
@@ -371,7 +390,9 @@ async def chat_with_model(messages: List[ChatMessage], context: str):
 2. 如有必要，可引用上下文中的具体内容
 3. 回答要清晰、有条理
 4. 如问题超出上下文范围，请明确告知
-5. 回答使用中文"""
+5. 回答使用中文
+
+古文字处理：如果内容涉及古文字（特别是用双引号""标注的单字或词语，如"手"、"又"、"巾"等），或是提到"篆"相关的字（如篆书、小篆等），或是黑板上写的古文字，请单独标记这些字，用[seal]标签包裹，如：[seal]手[/seal]、[seal]篆[/seal]。注意：只标记单个字或词语，不要标记整句话。"""
 
     full_messages = [
         {"role": "system", "content": f"{system_prompt}\n\n以下是上下文信息：\n{context}"}
@@ -519,7 +540,9 @@ async def generate_detailed_summary(text: str, filename: str = "", chat_context:
 - 如发现内容偏离主题，以主题为准进行校正
 - 保持原文的核心信息和关键细节
 - 逻辑清晰，层次分明
-- 关键技术术语和概念不要遗漏"""
+- 关键技术术语和概念不要遗漏
+
+古文字处理：如果内容涉及古文字（特别是用双引号""标注的单字或词语，如"手"、"又"、"巾"等），或是提到"篆"相关的字（如篆书、小篆等），或是黑板上写的古文字，请单独标记这些字，用[seal]标签包裹，如：[seal]手[/seal]、[seal]篆[/seal]。注意：只标记单个字或词语，不要标记整句话。"""
 
     # 如果有对话上下文，添加到提示词
     if chat_context:
@@ -663,7 +686,9 @@ async def correct_transcription_with_ocr(transcription: List[Dict], ocr_results:
 - 每个元素包含 start, end, text 三个字段
 - 不要输出任何解释，只输出 JSON
 
-重要：只修正明显的错误，不要过度修正。转录中可能包含方言特征，这是正常的。"""
+重要：只修正明显的错误，不要过度修正。转录中可能包含方言特征，这是正常的。
+
+古文字处理：如果内容涉及古文字（特别是用双引号""标注的单字或词语，如"手"、"又"、"巾"等），或是提到"篆"相关的字（如篆书、小篆等），或是黑板上写的古文字，请单独标记这些字，用[seal]标签包裹，如：[seal]手[/seal]、[seal]篆[/seal]。注意：只标记单个字或词语，不要标记整句话。"""
 
     user_prompt = f"""【转录文本】
 {transcription_text}
